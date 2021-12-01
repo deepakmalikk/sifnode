@@ -887,7 +887,9 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             self.cmd.sifnoded_peggy2_init_validator(validator_moniker, validator_mnemonic, evm_network_descriptor, validator_power, chain_dir_base)
 
         # TODO Needs to be fixed when we support more than 1 validator
-        sifnoded_home = os.path.join(chain_dir_base, exactly_one(netdef_yml)["moniker"], ".sifnoded")
+        validator0 = exactly_one(netdef_yml)
+        sifnoded_home = os.path.join(chain_dir_base, validator0["moniker"], ".sifnoded")
+        validator0_address = validator0["address"]
 
         tokens = [
             [10**20, "rowan"],
@@ -895,8 +897,8 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         ]
 
         # Create an ADMIN account on sifnode with name "sifnodeadmin"
-        account_name = "sifnodeadmin"
-        self.cmd.sifnoded_peggy2_add_account(account_name, tokens, is_admin=True, sifnoded_home=sifnoded_home)
+        admin_account_name = "sifnodeadmin"
+        admin_account_address = self.cmd.sifnoded_peggy2_add_account(admin_account_name, tokens, is_admin=True, sifnoded_home=sifnoded_home)
 
         # Create an account for each relayer
         for i in range(relayer_count):
@@ -924,7 +926,6 @@ class Peggy2Environment(IntegrationTestsEnvironment):
 
         # region This part should be merged with sifchain_init_peggy
 
-
         tendermint_port = 26657
         tcp_url = "tcp://{}:{}".format(ANY_ADDR, tendermint_port)
         sifnoded_proc = self.cmd.sifnoded_start(minimum_gas_prices=[0.5, "rowan"], tcp_url=tcp_url,
@@ -936,8 +937,28 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             # while not self.tcp_probe_connect("localhost", tendermint_port):
             #     time.sleep(1)
             # self.wait_for_sif_account(netdef_json, validator1_address)
-            pass
+
+            # Peggy2
+            # How this works: by default, the command below will try to do a POST to http://localhost:26657.
+            # So the port has to be up first, but this query will fail anyway if it is not.
+            while True:
+                try:
+                    self.cmd.execst(["sifnoded", "query", "account", validator0_address, "--node", tcp_url])
+                    break
+                except Exception as e:
+                    log.debug(f"Waiting for sif account {validator0_address}... ({repr(e)})")
+                    time.sleep(1)
+
         _wait_for_sif_validator_up()
+
+        registry_json = project_dir("smart-contracts", "src", "devenv", "registry.json")
+
+        # sifnoded tx tokenregistry register-all ${registryPath} --home ${homeDir} --gas-prices 0.5rowan \
+        #     --gas-adjustment 1.5 --from ${sifnodedAdminAddress.name} --yes --keyring-backend test \
+        #     --chain-id ${this.chainId}
+        self.cmd.sifnoded_peggy2_token_registry_register_all(registry_json, [0.5, "rowan"], 1.5, admin_account_address,
+            chain_id, sifnoded_home=sifnoded_home)
+
 
         relayerdb_path = self.cmd.mktempdir()
         web3_provider = "ws://{}:{}/".format(hardhat_hostname, str(hardhat_port))

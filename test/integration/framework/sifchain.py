@@ -105,7 +105,7 @@ class Sifnoded(Command):
         # Whitelist relayer/witness account
         valoper = self.sifnoded_get_val_address(name, sifnoded_home=sifnoded_home)
         self.sifnoded_set_gen_denom_whitelist(denom_whitelist_file, sifnoded_home=sifnoded_home)
-        self.sifnoded_add_genesis_validators_peggy(evm_network_descriptor, valoper, validator_power)
+        self.sifnoded_add_genesis_validators_peggy(evm_network_descriptor, valoper, validator_power, sifnoded_home=sifnoded_home)
 
     def sifnoded_tx_clp_create_pool(self, chain_id, keyring_backend, from_name, symbol, fees, native_amount, external_amount):
         args = [self.binary, "tx", "clp", "create-pool", "--chain-id={}".format(chain_id),
@@ -115,12 +115,20 @@ class Sifnoded(Command):
         res = self.execst(args)
         return yaml_load(stdout(res))
 
+    def sifnoded_peggy2_token_registry_register_all(self, registry_path, gas_prices, gas_adjustment, from_account,
+        chain_id, sifnoded_home=None):
+        args = ["tx", "tokenregistry", "register-all", registry_path, "--gas-prices", sif_format_amount(gas_prices),
+            "--gas-adjustment", str(gas_adjustment), "--from", from_account, "--chain-id", chain_id, "--yes"]
+        tmp = self.sifnoded_exec(args, keyring_backend="test", sifnoded_home=sifnoded_home)
+        return tmp
+
     def sifnoded_start(self, tcp_url=None, minimum_gas_prices=None, sifnoded_home=None, log_file=None,
         log_format_json=False
     ):
         args = [self.binary, "start"] + \
             (["--minimum-gas-prices", sif_format_amount(*minimum_gas_prices)] if minimum_gas_prices is not None else []) + \
             (["--rpc.laddr", tcp_url] if tcp_url else []) + \
+            (["--log_level", "debug"] if log_format_json else []) + \
             (["--log_format", "json"] if log_format_json else []) + \
             (["--home", sifnoded_home] if sifnoded_home else [])
         return self.popen(args, log_file=log_file)
