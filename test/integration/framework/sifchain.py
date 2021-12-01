@@ -37,7 +37,7 @@ class Sifnoded(Command):
     def sifnoded_keys_add(self, moniker, mnemonic, sifnoded_home=None):
         stdin = [" ".join(mnemonic)]
         res = self.sifnoded_exec(["keys", "add", moniker, "--recover"], keyring_backend="test", sifnoded_home=sifnoded_home, stdin=stdin)
-        account = yaml_load(stdout(res))
+        account = exactly_one(yaml_load(stdout(res)))
         return account
 
     # Creates a new key in the keyring and returns its address ("sif1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx").
@@ -46,7 +46,7 @@ class Sifnoded(Command):
     def sifnoded_keys_add_1(self, moniker, sifnoded_home=None):
         res = self.sifnoded_exec(["keys", "add", moniker], keyring_backend="test", sifnoded_home=sifnoded_home, stdin=["y"])
         account = exactly_one(yaml_load(stdout(res)))
-        _mnemonic = stderr(res).splitlines()[-1].split(" ")
+        unused_mnemonic = stderr(res).splitlines()[-1].split(" ")
         return account
 
     # # This is without "--recover", it will generate a new mnemonic.
@@ -101,8 +101,7 @@ class Sifnoded(Command):
         return account_address
 
     def sifnoded_peggy2_add_relayer_witness_account(self, name, tokens, evm_network_descriptor, validator_power, denom_whitelist_file, sifnoded_home=None):
-        admin_account = self.sifnoded_peggy2_add_account(name, tokens, sifnoded_home=sifnoded_home)  # Note: is_admin=False
-        assert admin_account == name
+        unused_admin_account_addr = self.sifnoded_peggy2_add_account(name, tokens, sifnoded_home=sifnoded_home)  # Note: is_admin=False
         # Whitelist relayer/witness account
         valoper = self.sifnoded_get_val_address(name, sifnoded_home=sifnoded_home)
         self.sifnoded_set_gen_denom_whitelist(denom_whitelist_file, sifnoded_home=sifnoded_home)

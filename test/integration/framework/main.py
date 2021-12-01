@@ -854,6 +854,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             [999999 * 10**21, "sif5ebfaf95495ceb5a3efbd0b0c63150676ec71e023b1043c40bcaaf91c00e15b2"],
         ]
         validator_power = 100
+        denom_whitelist_file = project_dir("test", "integration", "whitelisted-denoms.json")
 
         self.cmd.sifgen_create_network(chain_id, validator_count, sifnoded_network_dir, network_config_file, seed_ip_address, mint_amount=mint_amount)
         netdef_yml = yaml_load(self.cmd.read_text_file(network_config_file))
@@ -899,11 +900,13 @@ class Peggy2Environment(IntegrationTestsEnvironment):
 
         # Create an account for each relayer
         for i in range(relayer_count):
-            self.cmd.sifnoded_peggy2_add_witness_relayer_account(f"relayer-{i}", tokens, hardhat_chain_id, validator_power, sifnoded_home=sifnoded_home)
+            self.cmd.sifnoded_peggy2_add_relayer_witness_account(f"relayer-{i}", tokens, hardhat_chain_id,
+                validator_power, denom_whitelist_file, sifnoded_home=sifnoded_home)
 
         # Create an account for each witness
         for i in range(witness_count):
-            self.cmd.sifnoded_peggy2_add_witness_relayer_account(f"witness-{i}", tokens, hardhat_chain_id, validator_power, sifnoded_home=sifnoded_home)
+            self.cmd.sifnoded_peggy2_add_relayer_witness_account(f"witness-{i}", tokens, hardhat_chain_id,
+                validator_power, denom_whitelist_file, sifnoded_home=sifnoded_home)
 
         # Old stuff (pre witness/relayer split)
 
@@ -920,7 +923,6 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         # self.cmd.sifchain_init_peggy(validator_moniker, validator_mnemonic, sifnoded_home, denom_whitelist_file)
 
         # region This part should be merged with sifchain_init_peggy
-
 
 
         tendermint_port = 26657

@@ -57,6 +57,8 @@ class Project:
         self.__rmdir(self.project_dir("smart-contracts", ".openzeppelin"))  # (1)
         self.__rmdir(self.project_dir("smart-contracts", "relayerdb"))  # (2)
         self.__rmdir(self.project_dir("smart-contracts", "venv"))
+        self.__rmdir(self.project_dir("smart-contracts", ".env"))
+        self.__rmdir(self.project_dir("test", "integration", "sifchainrelayerdb"))
 
         # Additional cleanup (not neccessary to make it work)
         # self.cmd.rm(self.project_dir("smart-contracts/combined.log"))
@@ -74,12 +76,11 @@ class Project:
         self.__rmdir(self.cmd.get_user_home("go"))
         self.__rmdir(self.cmd.get_user_home(".npm"))
         self.__rmdir(self.cmd.get_user_home(".npm-global"))
-        self.__rmdir(self.cmd.get_user_home(".npm-global"))
         self.__rmdir(self.cmd.get_user_home(".cache/yarn"))
         self.__rmdir(self.cmd.get_user_home(".sifnoded"))
         self.__rmdir(self.cmd.get_user_home(".sifnode-integration"))
         self.__rmdir(project_dir("smart-contracts/node_modules"))
-        self.cmd.execst(["npm", "install", "-g", "ganache-cli", "dotenv", "yarn"], cwd=self.smart_contracts_dir)
+        # self.cmd.execst(["npm", "install", "-g", "ganache-cli", "dotenv", "yarn"], cwd=self.smart_contracts_dir)
         self.install_smart_contracts_dependencies()
 
     def yarn(self, args, cwd=None, env=None):
