@@ -85,6 +85,9 @@ class Hardhat:
         # via "npx hardhat run scripts/devenv.ts" instead of "npx ts-node scripts/devenv.ts", so normally this would
         # not happen.
         # TODO Suggested solution: pass a parameter to deploy_contracts.ts where it should write the output json file
-        m = json.loads(stdout(res).splitlines()[1])
-        return Peggy2SmartContractAddresses(cosmos_bridge=m["cosmosBridge"], bridge_bank=m["bridgeBank"],
-            bridge_registry=m["bridgeRegistry"], rowan=m["rowanContract"])
+        tmp = stdout(res).splitlines()
+        assert len(tmp) == 2
+        assert tmp[0] == "No need to generate any newer typings."
+        tmp = json.loads(tmp[1])
+        return Peggy2SmartContractAddresses(cosmos_bridge=tmp["cosmosBridge"], bridge_bank=tmp["bridgeBank"],
+            bridge_registry=tmp["bridgeRegistry"], rowan=tmp["rowanContract"])

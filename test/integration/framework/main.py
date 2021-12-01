@@ -180,19 +180,20 @@ class Integrator(Ganache, Sifnoded, Command):
     #     adminuser_addr = self.sifchain_init_common(denom_whitelist_file, sifnoded_home)
     #     return adminuser_addr
 
-    def sifnoded_peggy2_init_validator(self, validator_moniker, validator_mnemonic, chain_dir_base):
+    def sifnoded_peggy2_init_validator(self, validator_moniker, validator_mnemonic, evm_network_descriptor, validator_power, chain_dir_base):
         sifnoded_home = os.path.join(chain_dir_base, validator_moniker, ".sifnoded")
 
         # Add validator key to test keyring
+        # This effectively copies key for validator_moniker from what sifgen creates in /tmp/sifnodedNetwor/validators
+        # to ~/.sifnoded (note absence of explicit sifnoded_home, therefore it's ~/.sifnoded)
         self.sifnoded_keys_add(validator_moniker, validator_mnemonic)
 
         # Read valoper key
+        # (Since we now copied the key to main keyring we could also read it from there)
         valoper = self.sifnoded_get_val_address(validator_moniker, sifnoded_home=sifnoded_home)
 
         # Add genesis validator
-        unknown_parameter_1 = 1  # Likely "network_descriptor"
-        unknown_parameter_2 = 100  # Likely "power"
-        self.sifnoded_add_genesis_validators_peggy(unknown_parameter_1, valoper, unknown_parameter_2, sifnoded_home=sifnoded_home)
+        self.sifnoded_add_genesis_validators_peggy(evm_network_descriptor, valoper, validator_power, sifnoded_home=sifnoded_home)
 
         # Get whitelisted validator
         # TODO Value is not being used
@@ -880,7 +881,8 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             validator_moniker = validator["moniker"]
             validator_mnemonic = validator["mnemonic"].split(" ")
             validator_password = validator["password"]
-            self.cmd.sifnoded_peggy2_init_validator(validator_moniker, validator_mnemonic, chain_dir_base)
+            evm_network_descriptor = 1  # TODO Why not hardhat_chain_id?
+            self.cmd.sifnoded_peggy2_init_validator(validator_moniker, validator_mnemonic, evm_network_descriptor, validator_power, chain_dir_base)
 
         # TODO Needs to be fixed when we support more than 1 validator
         sifnoded_home = os.path.join(chain_dir_base, exactly_one(netdef_yml)["moniker"], ".sifnoded")
