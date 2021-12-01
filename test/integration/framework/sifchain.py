@@ -37,11 +37,17 @@ class Sifnoded(Command):
     def sifnoded_keys_add(self, moniker, mnemonic, sifnoded_home=None):
         stdin = [" ".join(mnemonic)]
         res = self.sifnoded_exec(["keys", "add", moniker, "--recover"], keyring_backend="test", sifnoded_home=sifnoded_home, stdin=stdin)
-        return yaml_load(stdout(res))
+        account = yaml_load(stdout(res))
+        return account
 
+    # Creates a new key in the keyring and returns its address ("sif1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx").
+    # Since this is a test keyring, we don't need to save the generated private key.
+    # If we wanted to recreate it, we can capture the mnemonic from the message that is printed to stderr.
     def sifnoded_keys_add_1(self, moniker, sifnoded_home=None):
         res = self.sifnoded_exec(["keys", "add", moniker], keyring_backend="test", sifnoded_home=sifnoded_home, stdin=["y"])
-        return exactly_one(yaml_load(stdout(res)))
+        account = exactly_one(yaml_load(stdout(res)))
+        _mnemonic = stderr(res).splitlines()[-1].split(" ")
+        return account
 
     # # This is without "--recover", it will generate a new mnemonic.
     # # Using this is probably a bug.
@@ -83,15 +89,10 @@ class Sifnoded(Command):
 
     # At the moment only on future/peggy2 branch, called from PeggyEnvironment
     # This was split from init_common
-    def sifnoded_peggy2_add_account(self, name, is_admin=False, sifnoded_home=None):
+    def sifnoded_peggy2_add_account(self, name, tokens, is_admin=False, sifnoded_home=None):
         # TODO Peggy2 devenv feed "yes\nyes" into standard input, we only have "y\n"
-        account_address = self.sifnoded_keys_add_1(name, sifnoded_home=sifnoded_home)
-        account_address = account_address["address"]
-
-        tokens = [
-            [10**20, "rowan"],
-            [2 * 10**19, "ceth"]
-        ]
+        account = self.sifnoded_keys_add_1(name, sifnoded_home=sifnoded_home)
+        account_address = account["address"]
 
         self.sifnoded_add_genesis_account(account_address, tokens, sifnoded_home=sifnoded_home)
         if is_admin:
@@ -99,8 +100,8 @@ class Sifnoded(Command):
         self.sifnoded_set_genesis_whitelister_admin(account_address, sifnoded_home)
         return account_address
 
-    def sifnoded_peggy2_add_relayer_witness_account(self, name, evm_network_descriptor, validator_power, denom_whitelist_file, sifnoded_home=None):
-        admin_account = self.sifnoded_peggy2_add_account(name, sifnoded_home=sifnoded_home)  # Note: is_admin=False
+    def sifnoded_peggy2_add_relayer_witness_account(self, name, tokens, evm_network_descriptor, validator_power, denom_whitelist_file, sifnoded_home=None):
+        admin_account = self.sifnoded_peggy2_add_account(name, tokens, sifnoded_home=sifnoded_home)  # Note: is_admin=False
         assert admin_account == name
         # Whitelist relayer/witness account
         valoper = self.sifnoded_get_val_address(name, sifnoded_home=sifnoded_home)

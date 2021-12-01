@@ -73,6 +73,8 @@ class Hardhat:
         self.project.npx(["hardhat", "compile"], cwd=project_dir("smart-contracts"), pipe=False)
 
     def deploy_smart_contracts(self) -> Peggy2SmartContractAddresses:
+        # If this fails with tsyringe complaining about missing "../../build" directory, do this:
+        # rm -rf smart-contracts/artifacts.
         res = self.project.npx(["hardhat", "run", "scripts/deploy_contracts.ts", "--network", "localhost"],
             cwd=project_dir("smart-contracts"))
         # Skip first line "No need to generate any newer types". This only works if the smart contracts have already

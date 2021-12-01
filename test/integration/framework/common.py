@@ -16,6 +16,9 @@ ANY_ADDR = "0.0.0.0"
 def stdout(res):
     return res[1]
 
+def stderr(res):
+    return res[2]
+
 def stdout_lines(res):
     return stdout(res).splitlines()
 

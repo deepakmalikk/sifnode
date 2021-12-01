@@ -880,24 +880,30 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         for validator in netdef_yml:
             validator_moniker = validator["moniker"]
             validator_mnemonic = validator["mnemonic"].split(" ")
-            validator_password = validator["password"]
+            # TODO Not used
+            # validator_password = validator["password"]
             evm_network_descriptor = 1  # TODO Why not hardhat_chain_id?
             self.cmd.sifnoded_peggy2_init_validator(validator_moniker, validator_mnemonic, evm_network_descriptor, validator_power, chain_dir_base)
 
         # TODO Needs to be fixed when we support more than 1 validator
         sifnoded_home = os.path.join(chain_dir_base, exactly_one(netdef_yml)["moniker"], ".sifnoded")
 
+        tokens = [
+            [10**20, "rowan"],
+            [2 * 10**19, "ceth"]
+        ]
+
         # Create an ADMIN account on sifnode with name "sifnodeadmin"
         account_name = "sifnodeadmin"
-        self.cmd.sifnoded_peggy2_add_account(account_name, is_admin=True, sifnoded_home=sifnoded_home)
+        self.cmd.sifnoded_peggy2_add_account(account_name, tokens, is_admin=True, sifnoded_home=sifnoded_home)
 
         # Create an account for each relayer
         for i in range(relayer_count):
-            self.cmd.sifnoded_peggy2_add_witness_relayer_account(f"relayer-{i}", hardhat_chain_id, validator_power, sifnoded_home=sifnoded_home)
+            self.cmd.sifnoded_peggy2_add_witness_relayer_account(f"relayer-{i}", tokens, hardhat_chain_id, validator_power, sifnoded_home=sifnoded_home)
 
         # Create an account for each witness
         for i in range(witness_count):
-            self.cmd.sifnoded_peggy2_add_witness_relayer_account(f"witness-{i}", hardhat_chain_id, validator_power, sifnoded_home=sifnoded_home)
+            self.cmd.sifnoded_peggy2_add_witness_relayer_account(f"witness-{i}", tokens, hardhat_chain_id, validator_power, sifnoded_home=sifnoded_home)
 
         # Old stuff (pre witness/relayer split)
 
