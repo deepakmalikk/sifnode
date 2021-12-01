@@ -127,7 +127,7 @@ class Sifnoded(Command):
         cross_chain_fee_base, cross_chain_lock_fee, cross_chain_burn_fee, admin_account_name, chain_id, gas_prices,
         gas_adjustment, sifnoded_home=None
     ):
-        args = ["tx", "ethbridge", "set-cross-chain-fee", admin_account_address, network_id,
+        args = ["tx", "ethbridge", "set-cross-chain-fee", admin_account_address, str(network_id),
             ethereum_cross_chain_fee_token, str(cross_chain_fee_base), str(cross_chain_lock_fee),
             str(cross_chain_burn_fee), "--from", admin_account_name, "--chain-id", chain_id, "--gas-prices",
             sif_format_amount(*gas_prices), "--gas-adjustment", str(gas_adjustment), "-y"]

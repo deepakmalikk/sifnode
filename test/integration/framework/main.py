@@ -839,104 +839,25 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         })
 
         chain_id = "localnet"
-        sifnoded_network_dir = "/tmp/sifnodedNetwork"
-        self.cmd.rmdir(sifnoded_network_dir)
-        self.cmd.mkdir(sifnoded_network_dir)
-        network_config_file = "/tmp/sifnodedConfig.yml"
-        validator_count = 1
-        relayer_count = 1
-        witness_count = 1
-        seed_ip_address = "10.10.1.1"
-        rpc_port = 9000
         mint_amount = [
             [999999 * 10**21, "rowan"],
             [137 * 10**16, "ibc/FEEDFACEFEEDFACEFEEDFACEFEEDFACEFEEDFACEFEEDFACEFEEDFACEFEEDFACE"],
             [999999 * 10**21, "sif5ebfaf95495ceb5a3efbd0b0c63150676ec71e023b1043c40bcaaf91c00e15b2"],
         ]
         validator_power = 100
+        seed_ip_address = "10.10.1.1"
+        tendermint_port = 26657
         denom_whitelist_file = project_dir("test", "integration", "whitelisted-denoms.json")
-
-        self.cmd.sifgen_create_network(chain_id, validator_count, sifnoded_network_dir, network_config_file, seed_ip_address, mint_amount=mint_amount)
-        netdef_yml = yaml_load(self.cmd.read_text_file(network_config_file))
-
-        # netdef_yml is a list of generated validators like below.
-        # Each one has its unique IP (starting with base IP + 1), the first one also has is_seed=True.
-        #
-        # class ValidatorValues:
-        #     chain_id: str
-        #     node_id: str
-        #     ipv4_address: str
-        #     moniker: str
-        #     password: str
-        #     address: str
-        #     pub_key: str
-        #     mnemonic: str
-        #     validator_address: str
-        #     validator_consensus_address: str
-        #     is_seed: bool
-        assert len(netdef_yml) == validator_count
-
-        chain_dir_base = os.path.join(sifnoded_network_dir, "validators", chain_id)
-
-        for validator in netdef_yml:
-            validator_moniker = validator["moniker"]
-            validator_mnemonic = validator["mnemonic"].split(" ")
-            # TODO Not used
-            # validator_password = validator["password"]
-            evm_network_descriptor = 1  # TODO Why not hardhat_chain_id?
-            self.cmd.sifnoded_peggy2_init_validator(validator_moniker, validator_mnemonic, evm_network_descriptor, validator_power, chain_dir_base)
-
-        # TODO Needs to be fixed when we support more than 1 validator
-        validator0 = exactly_one(netdef_yml)
-        sifnoded_home = os.path.join(chain_dir_base, validator0["moniker"], ".sifnoded")
-        validator0_address = validator0["address"]
-
         tokens = [
             [10**20, "rowan"],
             [2 * 10**19, "ceth"]
         ]
-
-        # Create an ADMIN account on sifnode with name "sifnodeadmin"
-        admin_account_name = "sifnodeadmin"
-        admin_account_address = self.cmd.sifnoded_peggy2_add_account(admin_account_name, tokens, is_admin=True, sifnoded_home=sifnoded_home)
-
-        # Create an account for each relayer
-        for i in range(relayer_count):
-            self.cmd.sifnoded_peggy2_add_relayer_witness_account(f"relayer-{i}", tokens, hardhat_chain_id,
-                validator_power, denom_whitelist_file, sifnoded_home=sifnoded_home)
-
-        # Create an account for each witness
-        for i in range(witness_count):
-            self.cmd.sifnoded_peggy2_add_relayer_witness_account(f"witness-{i}", tokens, hardhat_chain_id,
-                validator_power, denom_whitelist_file, sifnoded_home=sifnoded_home)
-
-        tendermint_port = 26657
-        tcp_url = "tcp://{}:{}".format(ANY_ADDR, tendermint_port)
-        sifnoded_proc = self.cmd.sifnoded_start(minimum_gas_prices=[0.5, "rowan"], tcp_url=tcp_url,
-            sifnoded_home=sifnoded_home, log_format_json=True, log_file=sifnoded_log_file)
-
-        self.cmd.wait_for_sif_account_up(validator0_address, tcp_url)
-
         registry_json = project_dir("smart-contracts", "src", "devenv", "registry.json")
+        sifnoded_proc, tcp_url, admin_account_address, validators, relayer_addresses, witness_addresses = \
+            self.init_sifchain(sifnoded_log_file, chain_id, hardhat_chain_id, mint_amount, validator_power,
+                seed_ip_address, tendermint_port, denom_whitelist_file, tokens, registry_json)
 
-        # TODO This command exits with status 0, but looks like there are some errros.
-        # The same happens also in devenv.
-        res = self.cmd.sifnoded_peggy2_token_registry_register_all(registry_json, [0.5, "rowan"], 1.5, admin_account_address,
-            chain_id, sifnoded_home=sifnoded_home)
-        log.debug("Result from token registry: {}".format(repr(res)))
-        assert len(res) == 2
-        assert res[0]["raw_log"] == "failed to execute message; message index: 0: unauthorised signer: invalid address"
-        assert res[1]["raw_log"] == "failed to execute message; message index: 0: unauthorised signer: invalid address"
-
-        cross_chain_fee_base = 1
-        cross_chain_lock_fee = 1
-        cross_chain_burn_fee = 1
-        ethereum_cross_chain_fee_token = "sif5ebfaf95495ceb5a3efbd0b0c63150676ec71e023b1043c40bcaaf91c00e15b2"
-        gas_prices = [0.5, "rowan"]
-        gas_adjustment = 1.5
-        self.cmd.sifnoded_peggy2_set_cross_chain_fee(admin_account_name, hardhat_chain_id,
-            ethereum_cross_chain_fee_token, cross_chain_fee_base, cross_chain_lock_fee, cross_chain_burn_fee,
-            admin_account_name, chain_id, gas_prices, gas_adjustment, sifnoded_home=sifnoded_home)
+        return  # TODO
 
         relayerdb_path = self.cmd.mktempdir()
         web3_provider = "ws://{}:{}/".format(hardhat_hostname, str(hardhat_port))
@@ -1062,6 +983,99 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             self.cmd.write_text_file(project_dir("test/integration/vagrantenv.json"), json.dumps(state_vars, indent=4))
 
         return hardhat_proc, sifnoded_proc, ebrelayer_proc, witness_proc
+
+    def init_sifchain(self, sifnoded_log_file, chain_id, hardhat_chain_id, mint_amount, validator_power,
+        seed_ip_address, tendermint_port, denom_whitelist_file, tokens, registry_json
+    ):
+        sifnoded_network_dir = "/tmp/sifnodedNetwork"
+        self.cmd.rmdir(sifnoded_network_dir)
+        self.cmd.mkdir(sifnoded_network_dir)
+        network_config_file = "/tmp/sifnodedConfig.yml"
+        validator_count = 1
+        relayer_count = 1
+        witness_count = 1
+        # TODO Not used
+        # rpc_port = 9000
+
+        self.cmd.sifgen_create_network(chain_id, validator_count, sifnoded_network_dir, network_config_file, seed_ip_address, mint_amount=mint_amount)
+        validators = yaml_load(self.cmd.read_text_file(network_config_file))
+
+        # netdef_yml is a list of generated validators like below.
+        # Each one has its unique IP (starting with base IP + 1), the first one also has is_seed=True.
+        #
+        # class ValidatorValues:
+        #     chain_id: str
+        #     node_id: str
+        #     ipv4_address: str
+        #     moniker: str
+        #     password: str
+        #     address: str
+        #     pub_key: str
+        #     mnemonic: str
+        #     validator_address: str
+        #     validator_consensus_address: str
+        #     is_seed: bool
+        assert len(validators) == validator_count
+
+        chain_dir_base = os.path.join(sifnoded_network_dir, "validators", chain_id)
+
+        for validator in validators:
+            validator_moniker = validator["moniker"]
+            validator_mnemonic = validator["mnemonic"].split(" ")
+            # TODO Not used
+            # validator_password = validator["password"]
+            evm_network_descriptor = 1  # TODO Why not hardhat_chain_id?
+            self.cmd.sifnoded_peggy2_init_validator(validator_moniker, validator_mnemonic, evm_network_descriptor, validator_power, chain_dir_base)
+
+        # TODO Needs to be fixed when we support more than 1 validator
+        validator0 = exactly_one(validators)
+        sifnoded_home = os.path.join(chain_dir_base, validator0["moniker"], ".sifnoded")
+        validator0_address = validator0["address"]
+
+        # Create an ADMIN account on sifnode with name "sifnodeadmin"
+        admin_account_name = "sifnodeadmin"
+        admin_account_address = self.cmd.sifnoded_peggy2_add_account(admin_account_name, tokens, is_admin=True, sifnoded_home=sifnoded_home)
+
+        # Create an account for each relayer
+        relayer_addresses = [
+            self.cmd.sifnoded_peggy2_add_relayer_witness_account(f"relayer-{i}", tokens, hardhat_chain_id,
+                validator_power, denom_whitelist_file, sifnoded_home=sifnoded_home)
+            for i in range(relayer_count)
+        ]
+
+        # Create an account for each witness
+        witness_addresses = [
+            self.cmd.sifnoded_peggy2_add_relayer_witness_account(f"witness-{i}", tokens, hardhat_chain_id,
+                validator_power, denom_whitelist_file, sifnoded_home=sifnoded_home)
+            for i in range(witness_count)
+        ]
+
+        tcp_url = "tcp://{}:{}".format(ANY_ADDR, tendermint_port)
+        sifnoded_proc = self.cmd.sifnoded_start(minimum_gas_prices=[0.5, "rowan"], tcp_url=tcp_url,
+            sifnoded_home=sifnoded_home, log_format_json=True, log_file=sifnoded_log_file)
+
+        self.cmd.wait_for_sif_account_up(validator0_address, tcp_url)
+
+        # TODO This command exits with status 0, but looks like there are some errros.
+        # The same happens also in devenv.
+        res = self.cmd.sifnoded_peggy2_token_registry_register_all(registry_json, [0.5, "rowan"], 1.5, admin_account_address,
+            chain_id, sifnoded_home=sifnoded_home)
+        log.debug("Result from token registry: {}".format(repr(res)))
+        assert len(res) == 2
+        assert res[0]["raw_log"] == "failed to execute message; message index: 0: unauthorised signer: invalid address"
+        assert res[1]["raw_log"] == "failed to execute message; message index: 0: unauthorised signer: invalid address"
+
+        cross_chain_fee_base = 1
+        cross_chain_lock_fee = 1
+        cross_chain_burn_fee = 1
+        ethereum_cross_chain_fee_token = "sif5ebfaf95495ceb5a3efbd0b0c63150676ec71e023b1043c40bcaaf91c00e15b2"
+        gas_prices = [0.5, "rowan"]
+        gas_adjustment = 1.5
+        self.cmd.sifnoded_peggy2_set_cross_chain_fee(admin_account_name, hardhat_chain_id,
+            ethereum_cross_chain_fee_token, cross_chain_fee_base, cross_chain_lock_fee, cross_chain_burn_fee,
+            admin_account_name, chain_id, gas_prices, gas_adjustment, sifnoded_home=sifnoded_home)
+
+        return sifnoded_proc, tcp_url, admin_account_address, validators, relayer_addresses, witness_addresses
 
     # Write compatibility JSON files with smart contract addresses so that test_utilities.py:contract_artifact() keeps
     # working. We're not using truffle, so we need to create files with the same names and structure as it's used for
