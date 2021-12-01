@@ -910,55 +910,33 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             self.cmd.sifnoded_peggy2_add_relayer_witness_account(f"witness-{i}", tokens, hardhat_chain_id,
                 validator_power, denom_whitelist_file, sifnoded_home=sifnoded_home)
 
-        # Old stuff (pre witness/relayer split)
-
-        # netdef = exactly_one(netdef_yml)
-        # validator_moniker = netdef["moniker"]
-        # validator_mnemonic = netdef["mnemonic"].split(" ")
-        # # Not used
-        # # validator_password = netdef["password"]
-        #
-        # chain_dir = os.path.join(sifnoded_network_dir, "validators", chain_id, validator_moniker)
-        # sifnoded_home = os.path.join(chain_dir, ".sifnoded")
-        # denom_whitelist_file = project_dir("test", "integration", "whitelisted-denoms.json")
-        #
-        # self.cmd.sifchain_init_peggy(validator_moniker, validator_mnemonic, sifnoded_home, denom_whitelist_file)
-
-        # region This part should be merged with sifchain_init_peggy
-
         tendermint_port = 26657
         tcp_url = "tcp://{}:{}".format(ANY_ADDR, tendermint_port)
         sifnoded_proc = self.cmd.sifnoded_start(minimum_gas_prices=[0.5, "rowan"], tcp_url=tcp_url,
             sifnoded_home=sifnoded_home, log_format_json=True, log_file=sifnoded_log_file)
 
-        def _wait_for_sif_validator_up():
-            # TODO Deduplicate: this is also in run_ebrelayer()
-            # netdef_json is path to file containing json_dump(netdef)
-            # while not self.tcp_probe_connect("localhost", tendermint_port):
-            #     time.sleep(1)
-            # self.wait_for_sif_account(netdef_json, validator1_address)
-
-            # Peggy2
-            # How this works: by default, the command below will try to do a POST to http://localhost:26657.
-            # So the port has to be up first, but this query will fail anyway if it is not.
-            while True:
-                try:
-                    self.cmd.execst(["sifnoded", "query", "account", validator0_address, "--node", tcp_url])
-                    break
-                except Exception as e:
-                    log.debug(f"Waiting for sif account {validator0_address}... ({repr(e)})")
-                    time.sleep(1)
-
-        _wait_for_sif_validator_up()
+        self.cmd.wait_for_sif_account_up(validator0_address, tcp_url)
 
         registry_json = project_dir("smart-contracts", "src", "devenv", "registry.json")
 
-        # sifnoded tx tokenregistry register-all ${registryPath} --home ${homeDir} --gas-prices 0.5rowan \
-        #     --gas-adjustment 1.5 --from ${sifnodedAdminAddress.name} --yes --keyring-backend test \
-        #     --chain-id ${this.chainId}
-        self.cmd.sifnoded_peggy2_token_registry_register_all(registry_json, [0.5, "rowan"], 1.5, admin_account_address,
+        # TODO This command exits with status 0, but looks like there are some errros.
+        # The same happens also in devenv.
+        res = self.cmd.sifnoded_peggy2_token_registry_register_all(registry_json, [0.5, "rowan"], 1.5, admin_account_address,
             chain_id, sifnoded_home=sifnoded_home)
+        log.debug("Result from token registry: {}".format(repr(res)))
+        assert len(res) == 2
+        assert res[0]["raw_log"] == "failed to execute message; message index: 0: unauthorised signer: invalid address"
+        assert res[1]["raw_log"] == "failed to execute message; message index: 0: unauthorised signer: invalid address"
 
+        cross_chain_fee_base = 1
+        cross_chain_lock_fee = 1
+        cross_chain_burn_fee = 1
+        ethereum_cross_chain_fee_token = "sif5ebfaf95495ceb5a3efbd0b0c63150676ec71e023b1043c40bcaaf91c00e15b2"
+        gas_prices = [0.5, "rowan"]
+        gas_adjustment = 1.5
+        self.cmd.sifnoded_peggy2_set_cross_chain_fee(admin_account_name, hardhat_chain_id,
+            ethereum_cross_chain_fee_token, cross_chain_fee_base, cross_chain_lock_fee, cross_chain_burn_fee,
+            admin_account_name, chain_id, gas_prices, gas_adjustment, sifnoded_home=sifnoded_home)
 
         relayerdb_path = self.cmd.mktempdir()
         web3_provider = "ws://{}:{}/".format(hardhat_hostname, str(hardhat_port))

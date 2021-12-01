@@ -101,11 +101,12 @@ class Sifnoded(Command):
         return account_address
 
     def sifnoded_peggy2_add_relayer_witness_account(self, name, tokens, evm_network_descriptor, validator_power, denom_whitelist_file, sifnoded_home=None):
-        unused_admin_account_addr = self.sifnoded_peggy2_add_account(name, tokens, sifnoded_home=sifnoded_home)  # Note: is_admin=False
+        account_address = self.sifnoded_peggy2_add_account(name, tokens, sifnoded_home=sifnoded_home)  # Note: is_admin=False
         # Whitelist relayer/witness account
         valoper = self.sifnoded_get_val_address(name, sifnoded_home=sifnoded_home)
         self.sifnoded_set_gen_denom_whitelist(denom_whitelist_file, sifnoded_home=sifnoded_home)
         self.sifnoded_add_genesis_validators_peggy(evm_network_descriptor, valoper, validator_power, sifnoded_home=sifnoded_home)
+        return account_address
 
     def sifnoded_tx_clp_create_pool(self, chain_id, keyring_backend, from_name, symbol, fees, native_amount, external_amount):
         args = [self.binary, "tx", "clp", "create-pool", "--chain-id={}".format(chain_id),
@@ -117,10 +118,21 @@ class Sifnoded(Command):
 
     def sifnoded_peggy2_token_registry_register_all(self, registry_path, gas_prices, gas_adjustment, from_account,
         chain_id, sifnoded_home=None):
-        args = ["tx", "tokenregistry", "register-all", registry_path, "--gas-prices", sif_format_amount(gas_prices),
+        args = ["tx", "tokenregistry", "register-all", registry_path, "--gas-prices", sif_format_amount(*gas_prices),
             "--gas-adjustment", str(gas_adjustment), "--from", from_account, "--chain-id", chain_id, "--yes"]
-        tmp = self.sifnoded_exec(args, keyring_backend="test", sifnoded_home=sifnoded_home)
-        return tmp
+        res = self.sifnoded_exec(args, keyring_backend="test", sifnoded_home=sifnoded_home)
+        return [json.loads(x) for x in stdout(res).splitlines()]
+
+    def sifnoded_peggy2_set_cross_chain_fee(self, admin_account_address, network_id, ethereum_cross_chain_fee_token,
+        cross_chain_fee_base, cross_chain_lock_fee, cross_chain_burn_fee, admin_account_name, chain_id, gas_prices,
+        gas_adjustment, sifnoded_home=None
+    ):
+        args = ["tx", "ethbridge", "set-cross-chain-fee", admin_account_address, network_id,
+            ethereum_cross_chain_fee_token, str(cross_chain_fee_base), str(cross_chain_lock_fee),
+            str(cross_chain_burn_fee), "--from", admin_account_name, "--chain-id", chain_id, "--gas-prices",
+            sif_format_amount(*gas_prices), "--gas-adjustment", str(gas_adjustment), "-y"]
+        res = self.sifnoded_exec(args, keyring_backend="test", sifnoded_home=sifnoded_home)
+        return res
 
     def sifnoded_start(self, tcp_url=None, minimum_gas_prices=None, sifnoded_home=None, log_file=None,
         log_format_json=False
@@ -152,6 +164,23 @@ class Sifnoded(Command):
         while not self.exists(path):
             time.sleep(1)
 
+    def wait_for_sif_account_up(self, address, tcp_url=None):
+        # TODO Deduplicate: this is also in run_ebrelayer()
+        # netdef_json is path to file containing json_dump(netdef)
+        # while not self.tcp_probe_connect("localhost", tendermint_port):
+        #     time.sleep(1)
+        # self.wait_for_sif_account(netdef_json, validator1_address)
+
+        # Peggy2
+        # How this works: by default, the command below will try to do a POST to http://localhost:26657.
+        # So the port has to be up first, but this query will fail anyway if it is not.
+        while True:
+            try:
+                self.execst(["sifnoded", "query", "account", address, "--node", tcp_url])
+                break
+            except Exception as e:
+                log.debug(f"Waiting for sif account {address}... ({repr(e)})")
+                time.sleep(1)
 
 class Sifgen:
     def __init__(self, cmd):
