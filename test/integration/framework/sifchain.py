@@ -207,7 +207,7 @@ class Ebrelayer:
         self.cmd = cmd
         self.binary = "ebrelayer"
 
-    def peggy2_init_relayer(
+    def __deleteme__peggy2_init_relayer(
         self,
         network_descriptor,
         tendermint_node,
@@ -234,7 +234,7 @@ class Ebrelayer:
             ethereum_address=ethereum_address, ethereum_private_key=ethereum_private_key,
             keyring_backend=keyring_backend, cwd=cwd, log_file=log_file)
 
-    def peggy2_init_witness(
+    def __deleteme__peggy2_init_witness(
         self,
         network_descriptor,
         tendermint_node,

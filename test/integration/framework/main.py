@@ -861,7 +861,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         ]
         registry_json = project_dir("smart-contracts", "src", "devenv", "registry.json")
         sifnoded_proc, tcp_url, admin_account_address, sifnode_validator_addrs, sifnode_relayers, \
-            sifnode_witnesses = \
+            sifnode_witnesses, sifnode_validator0_home = \
                 self.init_sifchain(sifnoded_log_file, chain_id, hardhat_chain_id, mint_amount, validator_power,
                     seed_ip_address, tendermint_port, denom_whitelist_file, tokens, registry_json)
 
@@ -872,7 +872,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         symbol_translator_file = os.path.join(self.test_integration_dir, "config", "symbol_translator.json")
         _result = self.start_witnesses_and_relayers(hardhat_port, w3_websocket_address, hardhat_chain_id, tcp_url,
             chain_id, peggy_sc_addrs, hardhat_accounts["validators"], sifnode_validator_addrs, sifnode_relayers,
-            sifnode_witnesses, symbol_translator_file, relayer_log_file, witness_log_file)
+            sifnode_witnesses, sifnode_validator0_home, symbol_translator_file, relayer_log_file, witness_log_file)
 
         return  # TODO
 
@@ -1068,7 +1068,6 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             "name": name,
             "address": self.cmd.sifnoded_peggy2_add_relayer_witness_account(name, tokens, hardhat_chain_id,
                 validator_power, denom_whitelist_file, sifnoded_home=validator0_home),
-            "home": validator0_home,
         } for name in [f"relayer-{i}" for i in range(relayer_count)]]
 
         # Create an account for each witness
@@ -1076,7 +1075,6 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             "name": name,
             "address": self.cmd.sifnoded_peggy2_add_relayer_witness_account(name, tokens, hardhat_chain_id,
                 validator_power, denom_whitelist_file, sifnoded_home=validator0_home),
-            "home": validator0_home,
         } for name in [f"witness-{i}" for i in range(witness_count)]]
 
         tcp_url = "tcp://{}:{}".format(ANY_ADDR, tendermint_port)
@@ -1111,11 +1109,11 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             ethereum_cross_chain_fee_token, cross_chain_fee_base, cross_chain_lock_fee, cross_chain_burn_fee,
             admin_account_name, chain_id, gas_prices, gas_adjustment, sifnoded_home=validator0_home)
 
-        return sifnoded_proc, tcp_url, admin_account_address, validators, relayers, witnesses
+        return sifnoded_proc, tcp_url, admin_account_address, validators, relayers, witnesses, validator0_home
 
     def start_witnesses_and_relayers(self, hardhat_port, web3_websocket_address, hardhat_chain_id, tcp_url, chain_id,
         peggy_sc_addrs, evm_validator_accounts, sifnode_validators, sifnode_relayers, sifnode_witnesses,
-        symbol_translator_file, relayer_log_file, witness_log_file
+        sifnode_validator0_home, symbol_translator_file, relayer_log_file, witness_log_file
     ):
         # For now we assume a single validator
         evm_validator0_addr, evm_validator0_key = exactly_one(evm_validator_accounts)
@@ -1126,12 +1124,12 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         sifnode_relayer0 = exactly_one(sifnode_relayers)
         sifnode_relayer0_mnemonic = sifnode_relayer0["name"]
         sifnode_relayer0_address = sifnode_relayer0["address"]
-        sifnode_relayer0_home = sifnode_relayer0["home"]
+        sifnode_relayer0_home = sifnode_validator0_home
 
         sifnode_witness0 = exactly_one(sifnode_witnesses)
         sifnode_witness0_mnemonic = sifnode_witness0["name"]
         sifnode_witness0_address = sifnode_witness0["address"]
-        sifnode_witness0_home = sifnode_witness0["home"]
+        sifnode_witness0_home = sifnode_validator0_home
         sifnode_witness0_db_path = project_dir("smart-contracts", "witnessdb")
         self.cmd.rmdir(sifnode_witness0_db_path)
         self.cmd.mkdir(sifnode_witness0_db_path)
