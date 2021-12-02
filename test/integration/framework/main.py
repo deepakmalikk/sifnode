@@ -1071,7 +1071,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         ethereum_cross_chain_fee_token = "sif5ebfaf95495ceb5a3efbd0b0c63150676ec71e023b1043c40bcaaf91c00e15b2"
         gas_prices = [0.5, "rowan"]
         gas_adjustment = 1.5
-        self.cmd.sifnoded_peggy2_set_cross_chain_fee(admin_account_name, hardhat_chain_id,
+        self.cmd.sifnoded_peggy2_set_cross_chain_fee(admin_account_address, hardhat_chain_id,
             ethereum_cross_chain_fee_token, cross_chain_fee_base, cross_chain_lock_fee, cross_chain_burn_fee,
             admin_account_name, chain_id, gas_prices, gas_adjustment, sifnoded_home=sifnoded_home)
 
