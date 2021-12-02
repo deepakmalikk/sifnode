@@ -127,6 +127,7 @@ class Sifnoded(Command):
         cross_chain_fee_base, cross_chain_lock_fee, cross_chain_burn_fee, admin_account_name, chain_id, gas_prices,
         gas_adjustment, sifnoded_home=None
     ):
+        # Checked OK
         args = ["tx", "ethbridge", "set-cross-chain-fee", admin_account_address, str(network_id),
             ethereum_cross_chain_fee_token, str(cross_chain_fee_base), str(cross_chain_lock_fee),
             str(cross_chain_burn_fee), "--from", admin_account_name, "--chain-id", chain_id, "--gas-prices",
@@ -174,9 +175,11 @@ class Sifnoded(Command):
         # Peggy2
         # How this works: by default, the command below will try to do a POST to http://localhost:26657.
         # So the port has to be up first, but this query will fail anyway if it is not.
+        args = ["sifnoded", "query", "account", address] + \
+            (["--node", tcp_url] if tcp_url else [])
         while True:
             try:
-                self.execst(["sifnoded", "query", "account", address, "--node", tcp_url])
+                self.execst(args)
                 break
             except Exception as e:
                 log.debug(f"Waiting for sif account {address}... ({repr(e)})")
@@ -225,7 +228,7 @@ class Ebrelayer:
         #
         # Examples:
         # ebrelayer init-relayer 1 tcp://localhost:26657 ws://localhost:7545/ 0x30753E4A8aad7F8597332E813735Def5dD395028 mnemonic --chain-id=peggy
-        return self.__peggy2_init_common("init-relayer", network_descriptor, tendermint_node, web3_provider,
+        return self.peggy2_run_ebrelayer("init-relayer", network_descriptor, tendermint_node, web3_provider,
             bridge_registry_contract_address, validator_mnemonic, chain_id=chain_id, node=tendermint_node,
             sign_with=validator_moniker, symbol_translator_file=symbol_translator_file,
             ethereum_address=ethereum_address, ethereum_private_key=ethereum_private_key,
@@ -255,14 +258,14 @@ class Ebrelayer:
         # ebrelayer init-witness 1 tcp://localhost:26657 ws://localhost:7545/ 0x30753E4A8aad7F8597332E813735Def5dD395028 mnemonic --chain-id=peggy
         extra_args = [] + \
             (["--relayerdb-path", relayerdb_path] if relayerdb_path else [])
-        return self.__peggy2_init_common("init-witness", network_descriptor, tendermint_node, web3_provider,
+        return self.peggy2_run_ebrelayer("init-witness", network_descriptor, tendermint_node, web3_provider,
             bridge_registry_contract_address, validator_mnemonic, chain_id=chain_id, node=tendermint_node,
             sign_with=validator_moniker, symbol_translator_file=symbol_translator_file,
             ethereum_address=ethereum_address, ethereum_private_key=ethereum_private_key,
             keyring_backend=keyring_backend, cwd=cwd, log_file=log_file,
             log_format="json", extra_args=extra_args)
 
-    def __peggy2_init_common(self, init_what, network_descriptor, tendermint_node, web3_provider,
+    def peggy2_run_ebrelayer(self, init_what, network_descriptor, tendermint_node, web3_provider,
         bridge_registry_contract_address, validator_mnemonic, chain_id, node=None, keyring_backend=None,
         sign_with=None, symbol_translator_file=None, log_format=None, extra_args=None, ethereum_private_key=None,
         ethereum_address=None, cwd=None, log_file=None
@@ -278,12 +281,12 @@ class Ebrelayer:
         args = [
             self.binary,
             init_what,
-            network_descriptor,
-            tendermint_node,
-            web3_provider,
-            bridge_registry_contract_address,
-            " ".join(validator_mnemonic),
-            "--chain-id", chain_id
+            "--network-descriptor", str(network_descriptor),  # Network descriptor for the chain (31337)
+            "--tendermint-node", tendermint_node,  # URL to tendermint node
+            "--web3-provider", web3_provider,  # Ethereum web3 service address (ws://localhost:8545/)
+            "--bridge-registry-contract-address", bridge_registry_contract_address,
+            "--validator-mnemonic", validator_mnemonic,
+            "--chain-id", chain_id  # chain ID of tendermint node (localnet)
         ] + \
             (extra_args if extra_args else []) + \
             (["--node", node] if node else []) + \

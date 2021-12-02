@@ -779,6 +779,9 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         super().__init__(cmd)
         self.hardhat = Hardhat(cmd)
 
+    # Destuctures a linear array of EVM accounts into:
+    # [operator, owner, pauser, [validator-0, validator-1, ...], [...available...]]
+    # proxy_admin is the same as operator.
     def signer_array_to_ethereum_accounts(self, accounts, n_validators):
         assert len(accounts) >= n_validators + 3
         operator, owner, pauser, *rest = accounts  # Take 3 and store remaining in rest
@@ -805,19 +808,31 @@ class Peggy2Environment(IntegrationTestsEnvironment):
     def run(self):
         # self.project._make_go_binaries()
 
+        # Ordering (for possible parallelisation):
+        # - build_golang_binaries before start_sifchain
+        # - start_hardhat before deploy_smart_contracts
+        # - start_sifchain before start_witnesses_and_relayers
+        # - deploy_smart_contracts before start_witnesses_and_relayers
+        # - start_witnesses_and_relayers before return
+        # - write_env_file before return
+
+        # TODO: where is log watcher?
+
         log_dir = "/tmp/sifnode"
         self.cmd.mkdir(log_dir)
         hardhat_log_file = open(os.path.join(log_dir, "ganache.log"), "w")  # TODO close + use a different name
         sifnoded_log_file = open(os.path.join(log_dir, "sifnoded.log"), "w")  # TODO close
-        ebrelayer_log_file = open(os.path.join(log_dir, "evmrelayer.log"), "w")  # TODO close
+        relayer_log_file = open(os.path.join(log_dir, "relayer.log"), "w")  # TODO close
         witness_log_file = open(os.path.join(log_dir, "witness.log"), "w")  # TODO close; will be empty on non-peggy2 branch
 
         self.cmd.rmdir(self.cmd.get_user_home(".sifnoded"))  # Purge test keyring backend
 
-        hardhat_hostname = "localhost"
-        hardhat_port = 8545
-        hardhat_proc = self.hardhat.start(hardhat_hostname, hardhat_port, log_file=hardhat_log_file)
+        hardhat_bind_hostname = "localhost"  # The host to which to bind to for new connections (Defaults to 127.0.0.1 running locally, and 0.0.0.0 in Docker)
+        hardhat_port = 8545  # The port on which to listen for new connections (default: 8545)
+        hardhat_proc = self.start_hardhat(hardhat_bind_hostname, hardhat_port, hardhat_log_file)
 
+        # This determines how much EVM accounts we want to allocate for validators.
+        # Since every validator needs on EVM account, this should be equal to the number of validators (possibly more).
         hardhat_validator_count = 1
         hardhat_network_id = 1  # Not used in smart-contracts/src/devenv/hardhatNode.ts
         # This value is actually returned from HardhatNodeRunner. It comes from smart-contracts/hardhat.config.ts.
@@ -829,16 +844,8 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         hardhat_chain_id = 31337
         hardhat_accounts = self.signer_array_to_ethereum_accounts(Hardhat.default_accounts(), hardhat_validator_count)
 
-        self.hardhat.compile_smart_contracts()
-        peggy_sc_addrs = self.hardhat.deploy_smart_contracts()
-
-        self.write_compatibility_json_file_with_smart_contract_addresses({
-            "BridgeRegistry": peggy_sc_addrs.bridge_registry,
-            "BridgeBank": peggy_sc_addrs.bridge_bank,
-            # TODO There is no BridgeToken smart contract on Peggy2.0 branch, but there are "cosmos_bridge" and "rowan"
-        })
-
         chain_id = "localnet"
+        # Mint goes to validator
         mint_amount = [
             [999999 * 10**21, "rowan"],
             [137 * 10**16, "ibc/FEEDFACEFEEDFACEFEEDFACEFEEDFACEFEEDFACEFEEDFACEFEEDFACEFEEDFACE"],
@@ -853,11 +860,30 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             [2 * 10**19, "ceth"]
         ]
         registry_json = project_dir("smart-contracts", "src", "devenv", "registry.json")
-        sifnoded_proc, tcp_url, admin_account_address, validators, relayer_addresses, witness_addresses = \
-            self.init_sifchain(sifnoded_log_file, chain_id, hardhat_chain_id, mint_amount, validator_power,
-                seed_ip_address, tendermint_port, denom_whitelist_file, tokens, registry_json)
+        sifnoded_proc, tcp_url, admin_account_address, sifnode_validator_addrs, sifnode_relayers, \
+            sifnode_witnesses = \
+                self.init_sifchain(sifnoded_log_file, chain_id, hardhat_chain_id, mint_amount, validator_power,
+                    seed_ip_address, tendermint_port, denom_whitelist_file, tokens, registry_json)
+
+        self.hardhat.compile_smart_contracts()
+        peggy_sc_addrs = self.hardhat.deploy_smart_contracts()
+
+        w3_websocket_address = "ws://localhost:{}/".format(hardhat_port)
+        symbol_translator_file = os.path.join(self.test_integration_dir, "config", "symbol_translator.json")
+        _result = self.start_witnesses_and_relayers(hardhat_port, w3_websocket_address, hardhat_chain_id, tcp_url,
+            chain_id, peggy_sc_addrs, hardhat_accounts["validators"], sifnode_validator_addrs, sifnode_relayers,
+            sifnode_witnesses, symbol_translator_file, relayer_log_file, witness_log_file)
 
         return  # TODO
+
+
+
+        self.write_compatibility_json_file_with_smart_contract_addresses({
+            "BridgeRegistry": peggy_sc_addrs.bridge_registry,
+            "BridgeBank": peggy_sc_addrs.bridge_bank,
+            # TODO There is no BridgeToken smart contract on Peggy2.0 branch, but there are "cosmos_bridge" and "rowan"
+        })
+
 
         relayerdb_path = self.cmd.mktempdir()
         web3_provider = "ws://{}:{}/".format(hardhat_hostname, str(hardhat_port))
@@ -1037,18 +1063,18 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         admin_account_address = self.cmd.sifnoded_peggy2_add_account(admin_account_name, tokens, is_admin=True, sifnoded_home=sifnoded_home)
 
         # Create an account for each relayer
-        relayer_addresses = [
-            self.cmd.sifnoded_peggy2_add_relayer_witness_account(f"relayer-{i}", tokens, hardhat_chain_id,
+        relayers = [[
+            name,
+            self.cmd.sifnoded_peggy2_add_relayer_witness_account(name, tokens, hardhat_chain_id,
                 validator_power, denom_whitelist_file, sifnoded_home=sifnoded_home)
-            for i in range(relayer_count)
-        ]
+        ] for name in [f"relayer-{i}" for i in range(relayer_count)]]
 
         # Create an account for each witness
-        witness_addresses = [
-            self.cmd.sifnoded_peggy2_add_relayer_witness_account(f"witness-{i}", tokens, hardhat_chain_id,
+        witnesses = [[
+            name,
+            self.cmd.sifnoded_peggy2_add_relayer_witness_account(name, tokens, hardhat_chain_id,
                 validator_power, denom_whitelist_file, sifnoded_home=sifnoded_home)
-            for i in range(witness_count)
-        ]
+        ] for name in [f"witness-{i}" for i in range(witness_count)]]
 
         tcp_url = "tcp://{}:{}".format(ANY_ADDR, tendermint_port)
         sifnoded_proc = self.cmd.sifnoded_start(minimum_gas_prices=[0.5, "rowan"], tcp_url=tcp_url,
@@ -1075,7 +1101,90 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             ethereum_cross_chain_fee_token, cross_chain_fee_base, cross_chain_lock_fee, cross_chain_burn_fee,
             admin_account_name, chain_id, gas_prices, gas_adjustment, sifnoded_home=sifnoded_home)
 
-        return sifnoded_proc, tcp_url, admin_account_address, validators, relayer_addresses, witness_addresses
+        return sifnoded_proc, tcp_url, admin_account_address, validators, relayers, witnesses
+
+    def start_witnesses_and_relayers(self, hardhat_port, web3_websocket_address, hardhat_chain_id, tcp_url, chain_id,
+        peggy_sc_addrs, evm_validator_accounts, sifnode_validators, sifnode_relayers, sifnode_witnesses,
+        symbol_translator_file, relayer_log_file, witness_log_file
+    ):
+        # For now we assume a single validator
+        evm_validator0_addr, evm_validator0_key = exactly_one(evm_validator_accounts)
+        sifnode_validator0 = exactly_one(sifnode_validators)
+        sifnode_validator0_addr = sifnode_validator0["address"]
+        sifnode_validator0_moniker = sifnode_validator0["moniker"]
+        sifnode_relayer0_name, sifnode_relayer0_addr = exactly_one(sifnode_relayers)  # Probably we can use just addr
+        sifnode_witness0_name, sifnode_witness0_addr = exactly_one(sifnode_witnesses)  # Probably we can use just addr
+
+        bridge_registry_contract_addr = peggy_sc_addrs.bridge_registry
+        bridge_bank_contract_addr = peggy_sc_addrs.bridge_bank
+        cosmos_bridge_contract_addr = peggy_sc_addrs.cosmos_bridge
+        rowan_contract_addr = peggy_sc_addrs.rowan
+
+        assert hardhat_port == 8545
+        assert web3_websocket_address == "ws://localhost:8545/"
+        assert hardhat_chain_id == 31337
+        assert tcp_url == "tcp://0.0.0.0:26657"
+        assert chain_id == "localnet"
+
+        sifnode_relayer0_mnemonic = sifnode_relayer0_name  # TODO Probably a bug / wrong name, but that's how it is in devenv
+        sifnode_wirness0_mnemonic = sifnode_witness0_name  # TODO Probably a bug / wrong name, but that's how it is in devenv
+
+        self.cmd.wait_for_sif_account_up(sifnode_validator0_addr, tcp_url=tcp_url)  # Required for both relayer and witness
+
+        ebrelayer = Ebrelayer(self.cmd)
+
+        # Example from devenv:
+        # ebrelayer init-relayer
+        #     --network-descriptor 31337
+        #     --tendermint-node tcp://0.0.0.0:26657
+        #     --web3-provider ws://localhost:8545/
+        #     --bridge-registry-contract-address 0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e
+        #     --validator-mnemonic relayer-0
+        #     --chain-id localnet
+        #     --node tcp://0.0.0.0:26657
+        #     --from sif1a44w20496lgyv5asx4d4fnekdpy9xg8ymy9k3s
+        #     --symbol-translator-file ../test/integration/config/symbol_translator.json
+        #     --keyring-backend test
+        #     --home /tmp/sifnodedNetwork/validators/localnet/floral-butterfly/.sifnoded
+        relayer0_proc = ebrelayer.peggy2_run_ebrelayer(
+            "init-relayer",
+            hardhat_chain_id,
+            tcp_url,
+            web3_websocket_address,
+            bridge_registry_contract_addr,
+            sifnode_relayer0_mnemonic,
+            chain_id=chain_id,
+            node=tcp_url,
+            sign_with=sifnode_relayer0_addr,
+            symbol_translator_file=symbol_translator_file,
+            ethereum_address=evm_validator0_addr,
+            ethereum_private_key=evm_validator0_key,
+            keyring_backend="test",
+            log_file=relayer_log_file,
+        )
+
+        # Example from devenv:
+        # ebrelayer init-witness
+        #     --network-descriptor 31337
+        #     --tendermint-node tcp://0.0.0.0:26657
+        #     --web3-provider ws://localhost:8545/
+        #     --bridge-registry-contract-address 0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e
+        #     --validator-mnemonic witness-0
+        #     --chain-id localnet --node tcp://0.0.0.0:26657
+        #     --keyring-backend test
+        #     --from sif1l7025ps7lt24effpduwxhk45sd977djvu38lhr
+        #     --symbol-translator-file
+        #     ../test/integration/config/symbol_translator.json
+        #     --relayerdb-path ./witnessdb
+        #     --home /tmp/sifnodedNetwork/validators/localnet/floral-butterfly/.sifnoded
+        #     --log_format json
+
+
+        print()
+        return
+
+    def start_hardhat(self, hostname, port, log_file):
+        return self.hardhat.start(hostname=hostname, port=port, log_file=log_file)
 
     # Write compatibility JSON files with smart contract addresses so that test_utilities.py:contract_artifact() keeps
     # working. We're not using truffle, so we need to create files with the same names and structure as it's used for

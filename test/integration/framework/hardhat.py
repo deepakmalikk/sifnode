@@ -57,13 +57,13 @@ class Hardhat:
             "0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6",
         ]]]
 
-    def start(self, hostname, port, fork=None, fork_block_number=None, log_file=None):
+    def start(self, hostname=None, port=None, fork=None, fork_block_number=None, log_file=None):
         # TODO We need to manaege smart-contracts/hardhat.config.ts + it also reads smart-contracts/.env via dotenv
         # TODO Handle failures, e.g. if the process is already running we get exit value 1 and
         # "Error: listen EADDRINUSE: address already in use 127.0.0.1:8545"
         args = [os.path.join("node_modules", ".bin", "hardhat"), "node"] + \
-            ["--hostname", hostname] + \
-            ["--port", str(port)] + \
+            (["--hostname", hostname] if hostname else []) + \
+            (["--port", str(port)] if port is not None else []) + \
             (["--fork", fork] if fork else []) + \
             (["--fork-block-number", str(fork_block_number)] if fork_block_number is not None else [])
         proc = self.cmd.popen(args, cwd=self.project.smart_contracts_dir, log_file=log_file)
@@ -87,9 +87,9 @@ class Hardhat:
         # via "npx hardhat run scripts/devenv.ts" instead of "npx ts-node scripts/devenv.ts", so normally this would
         # not happen.
         # TODO Suggested solution: pass a parameter to deploy_contracts.ts where it should write the output json file
-        tmp = stdout(res).splitlines()
-        assert len(tmp) == 2
-        assert tmp[0] == "No need to generate any newer typings."
-        tmp = json.loads(tmp[1])
+        stdout_lines = stdout(res).splitlines()
+        assert len(stdout_lines) == 2
+        assert stdout_lines[0] == "No need to generate any newer typings."
+        tmp = json.loads(stdout_lines[1])
         return Peggy2SmartContractAddresses(cosmos_bridge=tmp["cosmosBridge"], bridge_bank=tmp["bridgeBank"],
             bridge_registry=tmp["bridgeRegistry"], rowan=tmp["rowanContract"])
