@@ -1055,37 +1055,48 @@ class Peggy2Environment(IntegrationTestsEnvironment):
 
         # TODO Needs to be fixed when we support more than 1 validator
         validator0 = exactly_one(validators)
-        sifnoded_home = os.path.join(chain_dir_base, validator0["moniker"], ".sifnoded")
+        validator0_home = os.path.join(chain_dir_base, validator0["moniker"], ".sifnoded")
         validator0_address = validator0["address"]
 
         # Create an ADMIN account on sifnode with name "sifnodeadmin"
         admin_account_name = "sifnodeadmin"
-        admin_account_address = self.cmd.sifnoded_peggy2_add_account(admin_account_name, tokens, is_admin=True, sifnoded_home=sifnoded_home)
+        admin_account_address = self.cmd.sifnoded_peggy2_add_account(admin_account_name, tokens, is_admin=True,
+            sifnoded_home=validator0_home)
 
         # Create an account for each relayer
-        relayers = [[
-            name,
-            self.cmd.sifnoded_peggy2_add_relayer_witness_account(name, tokens, hardhat_chain_id,
-                validator_power, denom_whitelist_file, sifnoded_home=sifnoded_home)
-        ] for name in [f"relayer-{i}" for i in range(relayer_count)]]
+        relayers = [{
+            "name": name,
+            "address": self.cmd.sifnoded_peggy2_add_relayer_witness_account(name, tokens, hardhat_chain_id,
+                validator_power, denom_whitelist_file, sifnoded_home=validator0_home),
+            "home": validator0_home,
+        } for name in [f"relayer-{i}" for i in range(relayer_count)]]
 
         # Create an account for each witness
-        witnesses = [[
-            name,
-            self.cmd.sifnoded_peggy2_add_relayer_witness_account(name, tokens, hardhat_chain_id,
-                validator_power, denom_whitelist_file, sifnoded_home=sifnoded_home)
-        ] for name in [f"witness-{i}" for i in range(witness_count)]]
+        witnesses = [{
+            "name": name,
+            "address": self.cmd.sifnoded_peggy2_add_relayer_witness_account(name, tokens, hardhat_chain_id,
+                validator_power, denom_whitelist_file, sifnoded_home=validator0_home),
+            "home": validator0_home,
+        } for name in [f"witness-{i}" for i in range(witness_count)]]
 
         tcp_url = "tcp://{}:{}".format(ANY_ADDR, tendermint_port)
+        # Example actual command line:
+        # sifnoded
+        #     start
+        #     --log_level debug
+        #     --log_format json
+        #     --minimum-gas-prices 0.5rowan
+        #     --rpc.laddr tcp://0.0.0.0:26657
+        #     --home /tmp/sifnodedNetwork/validators/localnet/still-wood/.sifnoded
         sifnoded_proc = self.cmd.sifnoded_start(minimum_gas_prices=[0.5, "rowan"], tcp_url=tcp_url,
-            sifnoded_home=sifnoded_home, log_format_json=True, log_file=sifnoded_log_file)
+            sifnoded_home=validator0_home, log_format_json=True, log_file=sifnoded_log_file)
 
         self.cmd.wait_for_sif_account_up(validator0_address, tcp_url)
 
         # TODO This command exits with status 0, but looks like there are some errros.
         # The same happens also in devenv.
         res = self.cmd.sifnoded_peggy2_token_registry_register_all(registry_json, [0.5, "rowan"], 1.5, admin_account_address,
-            chain_id, sifnoded_home=sifnoded_home)
+            chain_id, sifnoded_home=validator0_home)
         log.debug("Result from token registry: {}".format(repr(res)))
         assert len(res) == 2
         assert res[0]["raw_log"] == "failed to execute message; message index: 0: unauthorised signer: invalid address"
@@ -1099,7 +1110,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         gas_adjustment = 1.5
         self.cmd.sifnoded_peggy2_set_cross_chain_fee(admin_account_address, hardhat_chain_id,
             ethereum_cross_chain_fee_token, cross_chain_fee_base, cross_chain_lock_fee, cross_chain_burn_fee,
-            admin_account_name, chain_id, gas_prices, gas_adjustment, sifnoded_home=sifnoded_home)
+            admin_account_name, chain_id, gas_prices, gas_adjustment, sifnoded_home=validator0_home)
 
         return sifnoded_proc, tcp_url, admin_account_address, validators, relayers, witnesses
 
@@ -1109,11 +1120,22 @@ class Peggy2Environment(IntegrationTestsEnvironment):
     ):
         # For now we assume a single validator
         evm_validator0_addr, evm_validator0_key = exactly_one(evm_validator_accounts)
+
         sifnode_validator0 = exactly_one(sifnode_validators)
-        sifnode_validator0_addr = sifnode_validator0["address"]
-        sifnode_validator0_moniker = sifnode_validator0["moniker"]
-        sifnode_relayer0_name, sifnode_relayer0_addr = exactly_one(sifnode_relayers)  # Probably we can use just addr
-        sifnode_witness0_name, sifnode_witness0_addr = exactly_one(sifnode_witnesses)  # Probably we can use just addr
+        sifnode_validator0_address = sifnode_validator0["address"]
+
+        sifnode_relayer0 = exactly_one(sifnode_relayers)
+        sifnode_relayer0_mnemonic = sifnode_relayer0["name"]
+        sifnode_relayer0_address = sifnode_relayer0["address"]
+        sifnode_relayer0_home = sifnode_relayer0["home"]
+
+        sifnode_witness0 = exactly_one(sifnode_witnesses)
+        sifnode_witness0_mnemonic = sifnode_witness0["name"]
+        sifnode_witness0_address = sifnode_witness0["address"]
+        sifnode_witness0_home = sifnode_witness0["home"]
+        sifnode_witness0_db_path = project_dir("smart-contracts", "witnessdb")
+        self.cmd.rmdir(sifnode_witness0_db_path)
+        self.cmd.mkdir(sifnode_witness0_db_path)
 
         bridge_registry_contract_addr = peggy_sc_addrs.bridge_registry
         bridge_bank_contract_addr = peggy_sc_addrs.bridge_bank
@@ -1126,15 +1148,13 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         assert tcp_url == "tcp://0.0.0.0:26657"
         assert chain_id == "localnet"
 
-        sifnode_relayer0_mnemonic = sifnode_relayer0_name  # TODO Probably a bug / wrong name, but that's how it is in devenv
-        sifnode_wirness0_mnemonic = sifnode_witness0_name  # TODO Probably a bug / wrong name, but that's how it is in devenv
-
-        self.cmd.wait_for_sif_account_up(sifnode_validator0_addr, tcp_url=tcp_url)  # Required for both relayer and witness
+        self.cmd.wait_for_sif_account_up(sifnode_validator0_address, tcp_url=tcp_url)  # Required for both relayer and witness
 
         ebrelayer = Ebrelayer(self.cmd)
 
         # Example from devenv:
-        # ebrelayer init-relayer
+        # ebrelayer
+        #     init-relayer
         #     --network-descriptor 31337
         #     --tendermint-node tcp://0.0.0.0:26657
         #     --web3-provider ws://localhost:8545/
@@ -1146,6 +1166,21 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         #     --symbol-translator-file ../test/integration/config/symbol_translator.json
         #     --keyring-backend test
         #     --home /tmp/sifnodedNetwork/validators/localnet/floral-butterfly/.sifnoded
+        #
+        # Example actual command line:
+        # ebrelayer
+        #     init-relayer
+        #     --network-descriptor 31337
+        #     --tendermint-node tcp://0.0.0.0:26657
+        #     --web3-provider ws://localhost:8545/
+        #     --bridge-registry-contract-address 0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e
+        #     --validator-mnemonic relayer-0
+        #     --chain-id localnet
+        #     --node tcp://0.0.0.0:26657
+        #     --keyring-backend test
+        #     --from sif1jp0dzm0tj6ng8fxzvfk898nsyx8d04gzzn8pf4
+        #     --symbol-translator-file ../test/integration/config/symbol_translator.json
+        #     --home /tmp/sifnodedNetwork/validators/localnet/still-wood/.sifnoded
         relayer0_proc = ebrelayer.peggy2_run_ebrelayer(
             "init-relayer",
             hardhat_chain_id,
@@ -1155,33 +1190,68 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             sifnode_relayer0_mnemonic,
             chain_id=chain_id,
             node=tcp_url,
-            sign_with=sifnode_relayer0_addr,
+            sign_with=sifnode_relayer0_address,
             symbol_translator_file=symbol_translator_file,
             ethereum_address=evm_validator0_addr,
             ethereum_private_key=evm_validator0_key,
             keyring_backend="test",
             log_file=relayer_log_file,
+            home=sifnode_relayer0_home,
         )
 
         # Example from devenv:
-        # ebrelayer init-witness
+        # ebrelayer
+        #     init-witness
         #     --network-descriptor 31337
         #     --tendermint-node tcp://0.0.0.0:26657
         #     --web3-provider ws://localhost:8545/
         #     --bridge-registry-contract-address 0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e
         #     --validator-mnemonic witness-0
-        #     --chain-id localnet --node tcp://0.0.0.0:26657
-        #     --keyring-backend test
+        #     --chain-id localnet
+        #     --node tcp://0.0.0.0:26657
         #     --from sif1l7025ps7lt24effpduwxhk45sd977djvu38lhr
-        #     --symbol-translator-file
-        #     ../test/integration/config/symbol_translator.json
+        #     --symbol-translator-file ../test/integration/config/symbol_translator.json
         #     --relayerdb-path ./witnessdb
+        #     --log_format json
+        #     --keyring-backend test
         #     --home /tmp/sifnodedNetwork/validators/localnet/floral-butterfly/.sifnoded
+        #
+        # Example actual process:
+        # ebrelayer
+        #     init-witness
+        #     --network-descriptor 31337
+        #     --tendermint-node tcp://0.0.0.0:26657
+        #     --web3-provider ws://localhost:8545/
+        #     --bridge-registry-contract-address 0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e
+        #     --validator-mnemonic witness-0
+        #     --chain-id localnet
+        #     --node tcp://0.0.0.0:26657
+        #     --keyring-backend test
+        #     --from sif14xy6xrm7qne8jay3cg67l9e90la89sx2k29huz
+        #     --symbol-translator-file ../test/integration/config/symbol_translator.json
+        #     --relayerdb-path ./witnessdb
+        #     --home /tmp/sifnodedNetwork/validators/localnet/still-wood/.sifnoded
         #     --log_format json
 
+        witness0_proc = ebrelayer.peggy2_run_ebrelayer(
+            "init-witness",
+            hardhat_chain_id,
+            tcp_url,
+            web3_websocket_address,
+            bridge_registry_contract_addr,
+            sifnode_witness0_mnemonic,
+            chain_id=chain_id,
+            node=tcp_url,
+            sign_with=sifnode_witness0_address,
+            symbol_translator_file=symbol_translator_file,
+            relayerdb_path=sifnode_witness0_db_path,
+            keyring_backend="test",
+            log_format="json",
+            log_file=witness_log_file,
+            home=sifnode_witness0_home,
+        )
 
-        print()
-        return
+        return relayer0_proc, witness0_proc
 
     def start_hardhat(self, hostname, port, log_file):
         return self.hardhat.start(hostname=hostname, port=port, log_file=log_file)
