@@ -85,7 +85,6 @@ export class SifnodedRunner extends ShellCommand<SifnodedResults> {
     readonly whitelistFile = "../test/integration/whitelisted-denoms.json"
   ) {
     super()
-    this.sifnodedCommand = path.join(this.golangResults.goBin, "sifnoded")
     this.output = new Promise<SifnodedResults>((res, _) => {
       this.outputResolve = res
     })
@@ -146,6 +145,8 @@ export class SifnodedRunner extends ShellCommand<SifnodedResults> {
       console.log(
         `Added genesis validator: ${JSON.stringify({ moniker, homeDir, chainDir, valOperKey })}`
       )
+
+      // TODO This is not needed, plus it doesn't need a password
       const whitelistedValidator = ChildProcess.execSync(
         `${this.sifnodedCommand} keys show -a --bech val ${moniker} --keyring-backend test`,
         { encoding: "utf8", input: password }

@@ -108,7 +108,12 @@ async function main() {
       process.on("SIGTERM", res)
     })
     const [hardhat, golang] = await Promise.all([startHardhat(), golangBuilder()])
+    console.log(hardhat.results)
+    console.log(golang.results)
+    // ok
     const sifnode = await sifnodedBuilder(golang.results)
+    console.log(sifnode.results)
+    return
     const smartcontract = await smartContractDeployer()
     const { relayer, witness } = await ebrelayerWitnessBuilder(
       smartcontract.result.contractAddresses,
