@@ -16,6 +16,7 @@ import {
 } from "child_process"
 import { network } from "hardhat"
 import { sleep } from "./devEnvUtilities"
+import { log } from "console"
 
 export const crossChainFeeBase: number = 1
 export const crossChainLockFee: number = 1
@@ -85,6 +86,7 @@ export class SifnodedRunner extends ShellCommand<SifnodedResults> {
     readonly whitelistFile = "../test/integration/whitelisted-denoms.json"
   ) {
     super()
+    this.sifnodedCommand = path.join(this.golangResults.goBin, "sifnoded")
     this.output = new Promise<SifnodedResults>((res, _) => {
       this.outputResolve = res
     })
@@ -141,7 +143,7 @@ export class SifnodedRunner extends ShellCommand<SifnodedResults> {
       await this.addValidatorKeyToTestKeyring(moniker, mnemonic)
 
       const valOperKey = this.readValoperKey(moniker, homeDir)
-      const stdout = await this.addGenesisValidator(chainDir, valOperKey)
+      await this.addGenesisValidator(chainDir, valOperKey)
       console.log(
         `Added genesis validator: ${JSON.stringify({ moniker, homeDir, chainDir, valOperKey })}`
       )
@@ -174,10 +176,15 @@ export class SifnodedRunner extends ShellCommand<SifnodedResults> {
     // Must wait for sifnode to fully start first
     await waitForSifAccount(networkConfig[0].address, this.sifnodedCommand)
     const registryPath = path.resolve(__dirname, "./", "registry.json")
-    ChildProcess.execSync(
+
+
+    // TODO This command looks like something is failing. The exit code is 0, but it prints this (x2):
+    // {"height":"2","txhash":"E84F6BB8D3C74F8CFF9867C0322E6E1C4E3485BAD839CC145EF2F881D651ADD6","codespace":"sdk","code":7,"data":"","raw_log":"failed to execute message; message index: 0: unauthorised signer: invalid address","logs":[],"info":"","gas_wanted":"200000","gas_used":"57304","tx":null,"timestamp":""}
+    const tmp = ChildProcess.execSync(
       `${this.sifnodedCommand} tx tokenregistry register-all ${registryPath} --home ${homeDir} --gas-prices 0.5rowan --gas-adjustment 1.5 --from ${sifnodedAdminAddress.name} --yes --keyring-backend test --chain-id ${this.chainId}`,
       { encoding: "utf8" }
     ).trim()
+    console.log("Result from token registry: " + tmp)
 
     await this.setCrossChainFee(
       sifnodedAdminAddress,
@@ -328,6 +335,11 @@ export class SifnodedRunner extends ShellCommand<SifnodedResults> {
       "1.5",
       "-y",
     ]
+
+    console.log(sifgenArgs) // TODO I'm getting this: 
+    // sifnoded tx ethbridge set-cross-chain-fee sifnodeadmin 31337 sif5ebfaf95495ceb5a3efbd0b0c63150676ec71e023b1043c40bcaaf91c00e15b2 1 1 1 --from sifnodeadmin 
+    //     --chain-id localnet --gas-prices 0.5rowan --gas-adjustment 1.5 -y --home /tmp/sifnodedNetwork/validators/localnet/quiet-sea/.sifnoded --keyring-backend test
+    // Error: decoding bech32 failed: invalid index of 1
 
     return ChildProcess.execFileSync(this.sifnodedCommand, sifgenArgs, { encoding: "utf8" })
   }

@@ -134,7 +134,7 @@ export class RelayerRunner extends ShellCommand<EbrelayerResults> {
       [
         "init-relayer",
         "--network-descriptor",
-        String(this.args.chainId),
+        String(this.args.chainId),  // 31337
         "--tendermint-node",
         this.tcpURL,
         "--web3-provider",
@@ -169,6 +169,7 @@ export class RelayerRunner extends ShellCommand<EbrelayerResults> {
     process.env["ETHEREUM_PRIVATE_KEY"] = this.args.account.privateKey.slice(2)
     process.env["ETHEREUM_ADDRESS"] = this.args.account.address.slice(2)
     const spawncmd = "ebrelayer " + this.cmd()[1].join(" ")
+    console.log("ebrelayer command: " + spawncmd)
     const ebrelayerLogFile = fs.openSync(this.logFile, "w")
     const commandResult = ChildProcess.spawn(spawncmd, {
       shell: true,

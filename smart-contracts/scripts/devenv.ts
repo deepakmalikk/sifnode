@@ -74,21 +74,21 @@ async function witnessBuilder(args: EbrelayerArguments) {
 }
 
 async function ebrelayerWitnessBuilder(
-  contractAddresses: DeployedContractAddresses,
-  ethereumAccount: EthereumAddressAndKey,
-  validater: ValidatorValues,
-  relayerAccount: EbRelayerAccount,
-  witnessAccount: EbRelayerAccount,
+  contractAddresses: DeployedContractAddresses,  // SC addresses (cosmosBridge, bridgeBank, bridgeRegistry, rowanContract)
+  ethereumAccount: EthereumAddressAndKey,  // The first validator account from hardhat accounts
+  validater: ValidatorValues, // First validator account from sifnode results
+  relayerAccount: EbRelayerAccount,  // First relayer account from sifnode results
+  witnessAccount: EbRelayerAccount, // First witness account from sifnode results
   golangResults: GolangResults,
-  chainId: number
+  chainId: number // 31337 (from hardhat)
 ) {
   const relayerArgs: EbrelayerArguments = {
-    smartContract: contractAddresses,
-    account: ethereumAccount,
-    validatorValues: validater,
-    sifnodeAccount: relayerAccount,
+    smartContract: contractAddresses,  // SC addresses (cosmosBridge, bridgeBank, bridgeRegistry, rowanContract)
+    account: ethereumAccount,  // The first validator account from hardhat accounts
+    validatorValues: validater, // First validator account from sifnode results
+    sifnodeAccount: relayerAccount, // First relayer account from sifnode results / First witness account from sifnode results
     golangResults,
-    chainId,
+    chainId, // 31337 (from hardhat)
   }
   const witnessArgs = { ...relayerArgs, sifnodeAccount: witnessAccount }
   const relayerPromise = relayerBuilder(relayerArgs)
@@ -113,7 +113,6 @@ async function main() {
     // ok
     const sifnode = await sifnodedBuilder(golang.results)
     console.log(sifnode.results)
-    return
     const smartcontract = await smartContractDeployer()
     const { relayer, witness } = await ebrelayerWitnessBuilder(
       smartcontract.result.contractAddresses,
@@ -126,6 +125,7 @@ async function main() {
       // hardhat.results.chainId
       31337
     )
+    return
     EnvJSONWriter({
       contractResults: smartcontract.result,
       ethResults: hardhat.results,
