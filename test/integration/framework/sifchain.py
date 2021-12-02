@@ -15,42 +15,45 @@ class Sifnoded(Command):
         res = self.execst(args)
         return json.loads(res[2])  # output is on stderr
 
-    def sifnoded_keys_show(self, name, bech=None, keyring_backend=None, home=None):
+    def sifnoded_keys_show(self, name, bech=None, keyring_backend=None, sifnoded_home=None):
         keyring_backend = keyring_backend or "test"
         args = ["keys", "show", name] + \
             (["--bech", bech] if bech else [])
-        res = self.sifnoded_exec(args, keyring_backend=keyring_backend, sifnoded_home=home)
+        res = self.sifnoded_exec(args, keyring_backend=keyring_backend, sifnoded_home=sifnoded_home)
         return yaml_load(stdout(res))
 
-    def sifnoded_get_val_address(self, moniker):
-        expected = exactly_one(stdout_lines(self.sifnoded_exec(["keys", "show", "-a", "--bech", "val", moniker], keyring_backend="test")))
-        result = exactly_one(self.sifnoded_keys_show(moniker, bech="val", keyring_backend="test"))["address"]
+    def sifnoded_get_val_address(self, moniker, sifnoded_home=None):
+        expected = exactly_one(stdout_lines(self.sifnoded_exec(["keys", "show", "-a", "--bech", "val", moniker], keyring_backend="test", sifnoded_home=sifnoded_home)))
+        result = exactly_one(self.sifnoded_keys_show(moniker, bech="val", keyring_backend="test", sifnoded_home=sifnoded_home))["address"]
         assert result == expected
         return result
 
-    def sifnoded_keys_add(self, moniker, mnemonic):
-        stdin = [" ".join(mnemonic)]
-        res = self.sifnoded_exec(["keys", "add", moniker, "--recover"], keyring_backend="test", stdin=stdin)
-        return yaml_load(stdout(res))
-
+    # Why we need several different functions here?
     # How "sifnoded keys add <name> --keyring-backend test" works:
     # If name does not exist yet, it creates it and returns a yaml
     # If name alredy exists, prompts for overwrite (y/n) on standard input, generates new address/pubkey/mnemonic
     # Directory used is xxx/keyring-test if "--home xxx" is specified, otherwise $HOME/.sifnoded/keyring-test
 
-    def sifnoded_keys_add_1(self, moniker):
-        res = self.sifnoded_exec(["keys", "add", moniker], keyring_backend="test", stdin=["y"])
+    def sifnoded_keys_add(self, moniker, mnemonic, sifnoded_home=None):
+        stdin = [" ".join(mnemonic)]
+        res = self.sifnoded_exec(["keys", "add", moniker, "--recover"], keyring_backend="test", sifnoded_home=sifnoded_home, stdin=stdin)
+        return yaml_load(stdout(res))
+
+    def sifnoded_keys_add_1(self, moniker, sifnoded_home=None):
+        res = self.sifnoded_exec(["keys", "add", moniker], keyring_backend="test", sifnoded_home=sifnoded_home, stdin=["y"])
         return exactly_one(yaml_load(stdout(res)))
 
-    # From peggy
-    # @TODO Passing mnemonic to stdin is useless, only "y/n" makes sense, probably could use sifnoded_keys_add_1
-    # See smart-contracts/src/devenv/sifnoded.ts:addValidatorKeysToTestKeyring
-    def sifnoded_keys_add_2(self, moniker, mnemonic):
-        stdin = [" ".join(mnemonic)]
-        res = self.sifnoded_exec(["keys", "add", moniker], keyring_backend="test", stdin=stdin)
-        result = exactly_one(yaml_load(stdout(res)))
-        # {"name": "<moniker>", "type": "local", "address": "sif1...", "pubkey": "sifpub1...", "mnemonic": "", "threshold": 0, "pubkeys": []}
-        return result
+    # # This is without "--recover", it will generate a new mnemonic.
+    # # Using this is probably a bug.
+    # # From peggy
+    # # @TODO Passing mnemonic to stdin is useless, only "y/n" makes sense, probably could use sifnoded_keys_add_1
+    # # See smart-contracts/src/devenv/sifnoded.ts:addValidatorKeysToTestKeyring
+    # def sifnoded_keys_add_2(self, moniker, mnemonic):
+    #     stdin = [" ".join(mnemonic)]
+    #     res = self.sifnoded_exec(["keys", "add", moniker], keyring_backend="test", stdin=stdin)
+    #     result = exactly_one(yaml_load(stdout(res)))
+    #     # {"name": "<moniker>", "type": "local", "address": "sif1...", "pubkey": "sifpub1...", "mnemonic": "", "threshold": 0, "pubkeys": []}
+    #     return result
 
     def sifnoded_keys_delete(self, name):
         self.execst(["sifnoded", "keys", "delete", name, "--keyring-backend", "test"], stdin=["y"], check_exit=False)
@@ -65,9 +68,44 @@ class Sifnoded(Command):
         return res
 
     # At the moment only on future/peggy2 branch, called from PeggyEnvironment
-    def sifnoded_add_genesis_validators_peggy(self, unknown_parameter_1, valoper, unknown_parameter_2, sifnoded_home):
-        self.sifnoded_exec(["add-genesis-validators", str(unknown_parameter_1), valoper, str(unknown_parameter_2)],
+    def sifnoded_add_genesis_validators_peggy(self, evm_network_descriptor, valoper, validator_power, sifnoded_home=None):
+        self.sifnoded_exec(["add-genesis-validators", str(evm_network_descriptor), valoper, str(validator_power)],
             sifnoded_home=sifnoded_home)
+
+    def sifnoded_set_genesis_oracle_admin(self, address, sifnoded_home=None):
+        self.sifnoded_exec(["set-genesis-oracle-admin", address], sifnoded_home=sifnoded_home)
+
+    def sifnoded_set_genesis_whitelister_admin(self, address, sifnoded_home=None):
+        self.sifnoded_exec(["set-genesis-whitelister-admin", address], sifnoded_home=sifnoded_home)
+
+    def sifnoded_set_gen_denom_whitelist(self, denom_whitelist_file, sifnoded_home=None):
+        self.sifnoded_exec(["set-gen-denom-whitelist", denom_whitelist_file], sifnoded_home=sifnoded_home)
+
+    # At the moment only on future/peggy2 branch, called from PeggyEnvironment
+    # This was split from init_common
+    def sifnoded_peggy2_add_account(self, name, is_admin=False, sifnoded_home=None):
+        # TODO Peggy2 devenv feed "yes\nyes" into standard input, we only have "y\n"
+        account_address = self.sifnoded_keys_add_1(name, sifnoded_home=sifnoded_home)
+        account_address = account_address["address"]
+
+        tokens = [
+            [10**20, "rowan"],
+            [2 * 10**19, "ceth"]
+        ]
+
+        self.sifnoded_add_genesis_account(account_address, tokens, sifnoded_home=sifnoded_home)
+        if is_admin:
+            self.sifnoded_set_genesis_oracle_admin(account_address, sifnoded_home=sifnoded_home)
+        self.sifnoded_set_genesis_whitelister_admin(account_address, sifnoded_home)
+        return account_address
+
+    def sifnoded_peggy2_add_relayer_witness_account(self, name, evm_network_descriptor, validator_power, denom_whitelist_file, sifnoded_home=None):
+        admin_account = self.sifnoded_peggy2_add_account(name, sifnoded_home=sifnoded_home)  # Note: is_admin=False
+        assert admin_account == name
+        # Whitelist relayer/witness account
+        valoper = self.sifnoded_get_val_address(name, sifnoded_home=sifnoded_home)
+        self.sifnoded_set_gen_denom_whitelist(denom_whitelist_file, sifnoded_home=sifnoded_home)
+        self.sifnoded_add_genesis_validators_peggy(evm_network_descriptor, valoper, validator_power)
 
     def sifnoded_tx_clp_create_pool(self, chain_id, keyring_backend, from_name, symbol, fees, native_amount, external_amount):
         args = [self.binary, "tx", "clp", "create-pool", "--chain-id={}".format(chain_id),

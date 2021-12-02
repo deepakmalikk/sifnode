@@ -134,7 +134,7 @@ class Integrator(Ganache, Sifnoded, Command):
     def sifchain_init_integration(self, validator_moniker, validator_mnemonic, sifnoded_home, denom_whitelist_file, validator1_password):
         # now we have to add the validator key to the test keyring so the tests can send rowan from validator1
         self.sifnoded_keys_add(validator_moniker, validator_mnemonic)
-        valoper = self.sifnoded_keys_show(validator_moniker, bech="val", keyring_backend="test", home=sifnoded_home)[0]["address"]
+        valoper = self.sifnoded_keys_show(validator_moniker, bech="val", keyring_backend="test", sifnoded_home=sifnoded_home)[0]["address"]
         assert valoper == self.sifnoded_get_val_address(validator_moniker)  # This does not use "home"; if it the assertion holds it could be grouped with sifchain_init_peggy
 
         self.execst(["sifnoded", "add-genesis-validators", valoper, "--home", sifnoded_home])
@@ -159,38 +159,61 @@ class Integrator(Ganache, Sifnoded, Command):
         adminuser_addr = self.sifchain_init_common(denom_whitelist_file, sifnoded_home)
         return adminuser_addr
 
-    # @parameter validator_moniker - from network config
-    # @parameter validator_mnemonic - from network config
-    def sifchain_init_peggy(self, validator_moniker, validator_mnemonic, sifnoded_home, denom_whitelist_file):
-        # Add validator key to test keyring
-        _tmp0 = self.sifnoded_keys_add_2(validator_moniker, validator_mnemonic)
-        valoper = self.sifnoded_get_val_address(validator_moniker)
+    # # @parameter validator_moniker - from network config
+    # # @parameter validator_mnemonic - from network config
+    # # @TODO Obsolete
+    # def sifchain_init_peggy(self, validator_moniker, validator_mnemonic, sifnoded_home, denom_whitelist_file):
+    #     # Add validator key to test keyring
+    #     _tmp0 = self.sifnoded_keys_add_2(validator_moniker, validator_mnemonic)  # This is probably wrong, should be sifnoded_keys_add (with "--recover")
+    #     valoper = self.sifnoded_get_val_address(validator_moniker)
+    #
+    #     # (0, '', '2021/09/07 05:55:33 AddGenesisValidatorCmd, adding addr: sifvaloper1f5vj6j2mnkaw0yec3ut9at4rkl2u23k2fxtrsv to whitelist: []\n')
+    #     unknown_parameter_1 = 1  # Likely "network_descriptor"
+    #     unknown_parameter_2 = 100  # Likely "power"
+    #     self.sifnoded_add_genesis_validators_peggy(unknown_parameter_1, valoper, unknown_parameter_2, sifnoded_home)
+    #
+    #     # Get whitelisted validator
+    #     # TODO Value is not being used
+    #     _whitelisted_validator = self.sifnoded_get_val_address(validator_moniker)
+    #     assert valoper == _whitelisted_validator
+    #
+    #     adminuser_addr = self.sifchain_init_common(denom_whitelist_file, sifnoded_home)
+    #     return adminuser_addr
 
-        # (0, '', '2021/09/07 05:55:33 AddGenesisValidatorCmd, adding addr: sifvaloper1f5vj6j2mnkaw0yec3ut9at4rkl2u23k2fxtrsv to whitelist: []\n')
+    def sifnoded_peggy2_init_validator(self, validator_moniker, validator_mnemonic, chain_dir_base):
+        sifnoded_home = os.path.join(chain_dir_base, validator_moniker, ".sifnoded")
+
+        # Add validator key to test keyring
+        self.sifnoded_keys_add(validator_moniker, validator_mnemonic)
+
+        # Read valoper key
+        valoper = self.sifnoded_get_val_address(validator_moniker, sifnoded_home=sifnoded_home)
+
+        # Add genesis validator
         unknown_parameter_1 = 1  # Likely "network_descriptor"
         unknown_parameter_2 = 100  # Likely "power"
-        self.sifnoded_add_genesis_validators_peggy(unknown_parameter_1, valoper, unknown_parameter_2, sifnoded_home)
+        self.sifnoded_add_genesis_validators_peggy(unknown_parameter_1, valoper, unknown_parameter_2, sifnoded_home=sifnoded_home)
 
         # Get whitelisted validator
         # TODO Value is not being used
+        # TODO We're using default home here instead of sifnoded_home above. Does this even work?
         _whitelisted_validator = self.sifnoded_get_val_address(validator_moniker)
         assert valoper == _whitelisted_validator
 
-        adminuser_addr = self.sifchain_init_common(denom_whitelist_file, sifnoded_home)
-        return adminuser_addr
-
-    # Shared between IntegrationEnvironment and PeggyEnvironment
+    # TODO Not any longer shared between IntegrationEnvironment and PeggyEnvironment
+    # Peggy2Environment calls sifnoded_peggy2_add_account
     def sifchain_init_common(self, denom_whitelist_file, sifnoded_home):
         sifnodeadmin_addr = self.sifnoded_keys_add_1("sifnodeadmin")["address"]
         tokens = [[10**20, "rowan"]]
         # Original from peggy:
         # self.cmd.execst(["sifnoded", "add-genesis-account", sifnoded_admin_address, "100000000000000000000rowan", "--home", sifnoded_home])
         self.sifnoded_add_genesis_account(sifnodeadmin_addr, tokens, sifnoded_home=sifnoded_home)
-        self.sifnoded_exec(["set-genesis-oracle-admin", sifnodeadmin_addr], sifnoded_home=sifnoded_home)
-        self.sifnoded_exec(["set-genesis-whitelister-admin", sifnodeadmin_addr], sifnoded_home=sifnoded_home)
-        self.sifnoded_exec(["set-gen-denom-whitelist", denom_whitelist_file], sifnoded_home=sifnoded_home)
+        self.sifnoded_set_genesis_oracle_admin(sifnodeadmin_addr, sifnoded_home=sifnoded_home)
+        self.sifnoded_set_genesis_oracle_admin(sifnodeadmin_addr, sifnoded_home=sifnoded_home)
+        self.sifnoded_set_gen_denom_whitelist(denom_whitelist_file, sifnoded_home=sifnoded_home)
         return sifnodeadmin_addr
 
+    # @TODO Move to Sifgen class
     def sifgen_create_network(self, chain_id, validator_count, networks_dir, network_definition_file, seed_ip_address, mint_amount=None):
         # Old call (no longer works either):
         # sifgen network create localnet 1 /mnt/shared/work/projects/sif/sifnode/local-tmp/my/deploy/rake/../networks \
@@ -757,8 +780,8 @@ class Peggy2Environment(IntegrationTestsEnvironment):
 
     def signer_array_to_ethereum_accounts(self, accounts, n_validators):
         assert len(accounts) >= n_validators + 3
-        operator, owner, pauser, *rest = accounts
-        validators, available = rest[:n_validators], rest[n_validators:]
+        operator, owner, pauser, *rest = accounts  # Take 3 and store remaining in rest
+        validators, available = rest[:n_validators], rest[n_validators:]  # Take n_validators for validators the remaining for available
         return {
             "proxy_admin": operator,
             "operator": operator,
@@ -796,11 +819,13 @@ class Peggy2Environment(IntegrationTestsEnvironment):
 
         hardhat_validator_count = 1
         hardhat_network_id = 1  # Not used in smart-contracts/src/devenv/hardhatNode.ts
-        hardhat_chain_id = 1  # Not used in smart-contracts/src/devenv/hardhatNode.ts
         # This value is actually returned from HardhatNodeRunner. It comes from smart-contracts/hardhat.config.ts.
         # In Typescript, its value is obtained by 'require("hardhat").hre.network.config.chainId'.
         # See https://hardhat.org/advanced/hardhat-runtime-environment.html
-        hardhat_chain_id = 31337  # From smart-contracts/hardhat.config.ts, a dynamically set in Typescript by 'requre("hardhat")'
+        # The value is not used; instead a hardcoded constant 31337 is passed to ebrelayerWitnessBuilder.
+        # Ask juniuszhou for details.
+        hardhat_chain_id = 1
+        hardhat_chain_id = 31337
         hardhat_accounts = self.signer_array_to_ethereum_accounts(Hardhat.default_accounts(), hardhat_validator_count)
 
         self.hardhat.compile_smart_contracts()
@@ -818,8 +843,18 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         self.cmd.mkdir(sifnoded_network_dir)
         network_config_file = "/tmp/sifnodedConfig.yml"
         validator_count = 1
+        relayer_count = 1
+        witness_count = 1
         seed_ip_address = "10.10.1.1"
-        self.cmd.sifgen_create_network(chain_id, validator_count, sifnoded_network_dir, network_config_file, seed_ip_address)
+        rpc_port = 9000
+        mint_amount = [
+            [999999 * 10**21, "rowan"],
+            [137 * 10**16, "ibc/FEEDFACEFEEDFACEFEEDFACEFEEDFACEFEEDFACEFEEDFACEFEEDFACEFEEDFACE"],
+            [999999 * 10**21, "sif5ebfaf95495ceb5a3efbd0b0c63150676ec71e023b1043c40bcaaf91c00e15b2"],
+        ]
+        validator_power = 100
+
+        self.cmd.sifgen_create_network(chain_id, validator_count, sifnoded_network_dir, network_config_file, seed_ip_address, mint_amount=mint_amount)
         netdef_yml = yaml_load(self.cmd.read_text_file(network_config_file))
 
         # netdef_yml is a list of generated validators like below.
@@ -838,17 +873,47 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         #     validator_consensus_address: str
         #     is_seed: bool
         assert len(netdef_yml) == validator_count
-        netdef = exactly_one(netdef_yml)
-        validator_moniker = netdef["moniker"]
-        validator_mnemonic = netdef["mnemonic"].split(" ")
-        # Not used
-        # validator_password = netdef["password"]
 
-        chain_dir = os.path.join(sifnoded_network_dir, "validators", chain_id, validator_moniker)
-        sifnoded_home = os.path.join(chain_dir, ".sifnoded")
-        denom_whitelist_file = project_dir("test", "integration", "whitelisted-denoms.json")
+        chain_dir_base = os.path.join(sifnoded_network_dir, "validators", chain_id)
 
-        self.cmd.sifchain_init_peggy(validator_moniker, validator_mnemonic, sifnoded_home, denom_whitelist_file)
+        for validator in netdef_yml:
+            validator_moniker = validator["moniker"]
+            validator_mnemonic = validator["mnemonic"].split(" ")
+            validator_password = validator["password"]
+            self.cmd.sifnoded_peggy2_init_validator(validator_moniker, validator_mnemonic, chain_dir_base)
+
+        # TODO Needs to be fixed when we support more than 1 validator
+        sifnoded_home = os.path.join(chain_dir_base, exactly_one(netdef_yml)["moniker"], ".sifnoded")
+
+        # Create an ADMIN account on sifnode with name "sifnodeadmin"
+        account_name = "sifnodeadmin"
+        self.cmd.sifnoded_peggy2_add_account(account_name, is_admin=True, sifnoded_home=sifnoded_home)
+
+        # Create an account for each relayer
+        for i in range(relayer_count):
+            self.cmd.sifnoded_peggy2_add_witness_relayer_account(f"relayer-{i}", hardhat_chain_id, validator_power, sifnoded_home=sifnoded_home)
+
+        # Create an account for each witness
+        for i in range(witness_count):
+            self.cmd.sifnoded_peggy2_add_witness_relayer_account(f"witness-{i}", hardhat_chain_id, validator_power, sifnoded_home=sifnoded_home)
+
+        # Old stuff (pre witness/relayer split)
+
+        # netdef = exactly_one(netdef_yml)
+        # validator_moniker = netdef["moniker"]
+        # validator_mnemonic = netdef["mnemonic"].split(" ")
+        # # Not used
+        # # validator_password = netdef["password"]
+        #
+        # chain_dir = os.path.join(sifnoded_network_dir, "validators", chain_id, validator_moniker)
+        # sifnoded_home = os.path.join(chain_dir, ".sifnoded")
+        # denom_whitelist_file = project_dir("test", "integration", "whitelisted-denoms.json")
+        #
+        # self.cmd.sifchain_init_peggy(validator_moniker, validator_mnemonic, sifnoded_home, denom_whitelist_file)
+
+        # region This part should be merged with sifchain_init_peggy
+
+
 
         tendermint_port = 26657
         tcp_url = "tcp://{}:{}".format(ANY_ADDR, tendermint_port)

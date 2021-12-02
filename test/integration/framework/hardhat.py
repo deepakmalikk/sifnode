@@ -57,12 +57,16 @@ class Hardhat:
             "0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6",
         ]]]
 
-    def start(self, hostname, port, log_file=None):
+    def start(self, hostname, port, fork=None, fork_block_number=None, log_file=None):
         # TODO We need to manaege smart-contracts/hardhat.config.ts + it also reads smart-contracts/.env via dotenv
         # TODO Handle failures, e.g. if the process is already running we get exit value 1 and
         # "Error: listen EADDRINUSE: address already in use 127.0.0.1:8545"
-        proc = self.cmd.popen([os.path.join("node_modules", ".bin", "hardhat"), "node", "--hostname", hostname, "--port",
-            str(port)], cwd=self.project.smart_contracts_dir, log_file=log_file)
+        args = [os.path.join("node_modules", ".bin", "hardhat"), "node"] + \
+            ["--hostname", hostname] + \
+            ["--port", str(port)] + \
+            (["--fork", fork] if fork else []) + \
+            (["--fork-block-number", str(fork_block_number)] if fork_block_number is not None else [])
+        proc = self.cmd.popen(args, cwd=self.project.smart_contracts_dir, log_file=log_file)
         return proc
 
     def compile_smart_contracts(self):
