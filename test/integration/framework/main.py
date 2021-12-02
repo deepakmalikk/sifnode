@@ -877,13 +877,11 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         return  # TODO
 
 
-
         self.write_compatibility_json_file_with_smart_contract_addresses({
             "BridgeRegistry": peggy_sc_addrs.bridge_registry,
             "BridgeBank": peggy_sc_addrs.bridge_bank,
             # TODO There is no BridgeToken smart contract on Peggy2.0 branch, but there are "cosmos_bridge" and "rowan"
         })
-
 
         relayerdb_path = self.cmd.mktempdir()
         web3_provider = "ws://{}:{}/".format(hardhat_hostname, str(hardhat_port))
@@ -1124,12 +1122,12 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         sifnode_relayer0 = exactly_one(sifnode_relayers)
         sifnode_relayer0_mnemonic = sifnode_relayer0["name"]
         sifnode_relayer0_address = sifnode_relayer0["address"]
-        sifnode_relayer0_home = sifnode_validator0_home
+        sifnode_relayer0_home = sifnode_validator0_home  # Relayer uses sifnoded's home
 
         sifnode_witness0 = exactly_one(sifnode_witnesses)
         sifnode_witness0_mnemonic = sifnode_witness0["name"]
         sifnode_witness0_address = sifnode_witness0["address"]
-        sifnode_witness0_home = sifnode_validator0_home
+        sifnode_witness0_home = sifnode_validator0_home  # Witness uses sifnoded's home
         sifnode_witness0_db_path = project_dir("smart-contracts", "witnessdb")
         self.cmd.rmdir(sifnode_witness0_db_path)
         self.cmd.mkdir(sifnode_witness0_db_path)
