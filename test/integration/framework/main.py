@@ -820,7 +820,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
 
         log_dir = "/tmp/sifnode"
         self.cmd.mkdir(log_dir)
-        hardhat_log_file = open(os.path.join(log_dir, "ganache.log"), "w")  # TODO close + use a different name
+        hardhat_log_file = open(os.path.join(log_dir, "hardhat.log"), "w")  # TODO close + use a different name
         sifnoded_log_file = open(os.path.join(log_dir, "sifnoded.log"), "w")  # TODO close
         relayer_log_file = open(os.path.join(log_dir, "relayer.log"), "w")  # TODO close
         witness_log_file = open(os.path.join(log_dir, "witness.log"), "w")  # TODO close; will be empty on non-peggy2 branch
@@ -1080,14 +1080,13 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         } for name in [f"witness-{i}" for i in range(witness_count)]]
 
         tcp_url = "tcp://{}:{}".format(ANY_ADDR, tendermint_port)
-        # Example actual command line:
         # sifnoded
         #     start
         #     --log_level debug
         #     --log_format json
         #     --minimum-gas-prices 0.5rowan
         #     --rpc.laddr tcp://0.0.0.0:26657
-        #     --home /tmp/sifnodedNetwork/validators/localnet/still-wood/.sifnoded
+        #     --home /tmp/sifnodedNetwork/validators/localnet/xxx-yyy/.sifnoded
         sifnoded_proc = self.cmd.sifnoded_start(minimum_gas_prices=[0.5, "rowan"], tcp_url=tcp_url,
             sifnoded_home=validator0_home, log_format_json=True, log_file=sifnoded_log_file)
 
@@ -1152,7 +1151,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
 
         ebrelayer = Ebrelayer(self.cmd)
 
-        # Example from devenv:
+        # Example:
         # ebrelayer
         #     init-relayer
         #     --network-descriptor 31337
@@ -1165,22 +1164,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         #     --from sif1a44w20496lgyv5asx4d4fnekdpy9xg8ymy9k3s
         #     --symbol-translator-file ../test/integration/config/symbol_translator.json
         #     --keyring-backend test
-        #     --home /tmp/sifnodedNetwork/validators/localnet/floral-butterfly/.sifnoded
-        #
-        # Example actual command line:
-        # ebrelayer
-        #     init-relayer
-        #     --network-descriptor 31337
-        #     --tendermint-node tcp://0.0.0.0:26657
-        #     --web3-provider ws://localhost:8545/
-        #     --bridge-registry-contract-address 0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e
-        #     --validator-mnemonic relayer-0
-        #     --chain-id localnet
-        #     --node tcp://0.0.0.0:26657
-        #     --keyring-backend test
-        #     --from sif1jp0dzm0tj6ng8fxzvfk898nsyx8d04gzzn8pf4
-        #     --symbol-translator-file ../test/integration/config/symbol_translator.json
-        #     --home /tmp/sifnodedNetwork/validators/localnet/still-wood/.sifnoded
+        #     --home /tmp/sifnodedNetwork/validators/localnet/xxx-yyy/.sifnoded
         relayer0_proc = ebrelayer.peggy2_run_ebrelayer(
             "init-relayer",
             hardhat_chain_id,
@@ -1214,25 +1198,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         #     --relayerdb-path ./witnessdb
         #     --log_format json
         #     --keyring-backend test
-        #     --home /tmp/sifnodedNetwork/validators/localnet/floral-butterfly/.sifnoded
-        #
-        # Example actual process:
-        # ebrelayer
-        #     init-witness
-        #     --network-descriptor 31337
-        #     --tendermint-node tcp://0.0.0.0:26657
-        #     --web3-provider ws://localhost:8545/
-        #     --bridge-registry-contract-address 0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e
-        #     --validator-mnemonic witness-0
-        #     --chain-id localnet
-        #     --node tcp://0.0.0.0:26657
-        #     --keyring-backend test
-        #     --from sif14xy6xrm7qne8jay3cg67l9e90la89sx2k29huz
-        #     --symbol-translator-file ../test/integration/config/symbol_translator.json
-        #     --relayerdb-path ./witnessdb
-        #     --home /tmp/sifnodedNetwork/validators/localnet/still-wood/.sifnoded
-        #     --log_format json
-
+        #     --home /tmp/sifnodedNetwork/validators/localnet/xxx-yyy/.sifnoded
         witness0_proc = ebrelayer.peggy2_run_ebrelayer(
             "init-witness",
             hardhat_chain_id,
@@ -1245,6 +1211,8 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             sign_with=sifnode_witness0_address,
             symbol_translator_file=symbol_translator_file,
             relayerdb_path=sifnode_witness0_db_path,
+            ethereum_address=evm_validator0_addr,
+            ethereum_private_key=evm_validator0_key,
             keyring_backend="test",
             log_format="json",
             log_file=witness_log_file,
