@@ -207,77 +207,12 @@ class Ebrelayer:
         self.cmd = cmd
         self.binary = "ebrelayer"
 
-    def __deleteme__peggy2_init_relayer(
-        self,
-        network_descriptor,
-        tendermint_node,
-        web3_provider,
-        bridge_registry_contract_address,
-        validator_moniker,
-        validator_mnemonic,
-        chain_id,
-        symbol_translator_file,
-        ethereum_address,
-        ethereum_private_key,
-        keyring_backend=None,
-        log_file=None,
-        cwd=None,
-    ):
-        # Usage:
-        #   ebrelayer init-relayer [networkDescriptor] [tendermintNode] [web3Provider] [bridgeRegistryContractAddress] [validatorMnemonic] [flags]
-        #
-        # Examples:
-        # ebrelayer init-relayer 1 tcp://localhost:26657 ws://localhost:7545/ 0x30753E4A8aad7F8597332E813735Def5dD395028 mnemonic --chain-id=peggy
-        return self.peggy2_run_ebrelayer("init-relayer", network_descriptor, tendermint_node, web3_provider,
-            bridge_registry_contract_address, validator_mnemonic, chain_id=chain_id, node=tendermint_node,
-            sign_with=validator_moniker, symbol_translator_file=symbol_translator_file,
-            ethereum_address=ethereum_address, ethereum_private_key=ethereum_private_key,
-            keyring_backend=keyring_backend, cwd=cwd, log_file=log_file)
-
-    def __deleteme__peggy2_init_witness(
-        self,
-        network_descriptor,
-        tendermint_node,
-        web3_provider,
-        bridge_registry_contract_address,
-        validator_moniker,
-        validator_mnemonic,
-        chain_id,
-        symbol_translator_file,
-        ethereum_address,
-        ethereum_private_key,
-        relayerdb_path=None,
-        keyring_backend=None,
-        log_file=None,
-        cwd=None,
-    ):
-        # Usage:
-        #   ebrelayer init-witness [networkDescriptor] [tendermintNode] [web3Provider] [bridgeRegistryContractAddress] [validatorMnemonic] [flags]
-        #
-        # Examples:
-        # ebrelayer init-witness 1 tcp://localhost:26657 ws://localhost:7545/ 0x30753E4A8aad7F8597332E813735Def5dD395028 mnemonic --chain-id=peggy
-        extra_args = [] + \
-            (["--relayerdb-path", relayerdb_path] if relayerdb_path else [])
-        return self.peggy2_run_ebrelayer("init-witness", network_descriptor, tendermint_node, web3_provider,
-            bridge_registry_contract_address, validator_mnemonic, chain_id=chain_id, node=tendermint_node,
-            sign_with=validator_moniker, symbol_translator_file=symbol_translator_file,
-            ethereum_address=ethereum_address, ethereum_private_key=ethereum_private_key,
-            keyring_backend=keyring_backend, cwd=cwd, log_file=log_file,
-            log_format="json", extra_args=extra_args)
-
     def peggy2_run_ebrelayer(self, init_what, network_descriptor, tendermint_node, web3_provider,
         bridge_registry_contract_address, validator_mnemonic, chain_id, node=None, keyring_backend=None,
         sign_with=None, symbol_translator_file=None, relayerdb_path=None, log_format=None, extra_args=None,
         ethereum_private_key=None, ethereum_address=None, home=None, log_file=None, cwd=None
     ):
-        env = {}
-        if ethereum_private_key:
-            assert not ethereum_private_key.startswith("0x")
-            env["ETHEREUM_PRIVATE_KEY"] = ethereum_private_key
-        if ethereum_address:
-            assert ethereum_address.startswith("0x")
-            env["ETHEREUM_ADDRESS"] = ethereum_address
-        env = env or None  # Avoid passing empty environment
+        env = _env_for_ethereum_address_and_key(ethereum_address, ethereum_private_key)
         args = [
             self.binary,
             init_what,
@@ -305,14 +240,7 @@ class Ebrelayer:
         node=None, keyring_backend=None, sign_with=None, symbol_translator_file=None, relayerdb_path=None,
         cwd=None, log_file=None
     ):
-        env = {}
-        if ethereum_private_key:
-            assert not ethereum_private_key.startswith("0x")
-            env["ETHEREUM_PRIVATE_KEY"] = ethereum_private_key
-        if ethereum_address:
-            assert ethereum_address.startswith("0x")
-            env["ETHEREUM_ADDRESS"] = ethereum_address
-        env = env or None  # Avoid passing empty environment
+        env = _env_for_ethereum_address_and_key(ethereum_address, ethereum_private_key)
         args = [self.binary, "init", tendermind_node, web3_provider, bridge_registry_contract_address,
             validator_moniker, " ".join(validator_mnemonic), "--chain-id={}".format(chain_id)] + \
             (["--gas", str(gas)] if gas is not None else []) + \
@@ -323,3 +251,15 @@ class Ebrelayer:
             (["--symbol-translator-file", symbol_translator_file] if symbol_translator_file else []) + \
             (["--relayerdb-path", relayerdb_path] if relayerdb_path else [])
         return self.cmd.popen(args, env=env, cwd=cwd, log_file=log_file)
+
+
+# This is probably useful for any program that uses web3 library in the same way
+def _env_for_ethereum_address_and_key(ethereum_address, ethereum_private_key):
+    env = {}
+    if ethereum_private_key:
+        assert not ethereum_private_key.startswith("0x")
+        env["ETHEREUM_PRIVATE_KEY"] = ethereum_private_key
+    if ethereum_address:
+        assert ethereum_address.startswith("0x")
+        env["ETHEREUM_ADDRESS"] = ethereum_address
+    return env or None  # Avoid passing empty environment

@@ -860,19 +860,27 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             [2 * 10**19, "ceth"]
         ]
         registry_json = project_dir("smart-contracts", "src", "devenv", "registry.json")
-        sifnoded_proc, tcp_url, admin_account_address, sifnode_validator_addrs, sifnode_relayers, \
+        sifnoded_network_dir = "/tmp/sifnodedNetwork"
+        self.cmd.rmdir(sifnoded_network_dir)
+        self.cmd.mkdir(sifnoded_network_dir)
+        network_config_file, sifnoded_proc, tcp_url, admin_account_address, sifnode_validator_addrs, sifnode_relayers, \
             sifnode_witnesses, sifnode_validator0_home = \
-                self.init_sifchain(sifnoded_log_file, chain_id, hardhat_chain_id, mint_amount, validator_power,
-                    seed_ip_address, tendermint_port, denom_whitelist_file, tokens, registry_json)
+        self.init_sifchain(sifnoded_network_dir, sifnoded_log_file, chain_id, hardhat_chain_id, mint_amount,
+            validator_power, seed_ip_address, tendermint_port, denom_whitelist_file, tokens, registry_json)
 
         self.hardhat.compile_smart_contracts()
         peggy_sc_addrs = self.hardhat.deploy_smart_contracts()
 
         w3_websocket_address = "ws://localhost:{}/".format(hardhat_port)
         symbol_translator_file = os.path.join(self.test_integration_dir, "config", "symbol_translator.json")
-        _result = self.start_witnesses_and_relayers(hardhat_port, w3_websocket_address, hardhat_chain_id, tcp_url,
+        [relayer0_proc], [witness0_proc] = \
+        self.start_witnesses_and_relayers(w3_websocket_address, hardhat_chain_id, tcp_url,
             chain_id, peggy_sc_addrs, hardhat_accounts["validators"], sifnode_validator_addrs, sifnode_relayers,
             sifnode_witnesses, sifnode_validator0_home, symbol_translator_file, relayer_log_file, witness_log_file)
+
+        self.env_json_writer(
+            basedir=project_dir(),
+        )
 
         return  # TODO
 
@@ -892,137 +900,75 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         # validator_moniker and validator_mnemonic is the validator on sifchain side
         # ethereum_address and ethereum_private_key is the validator on ethereum side
 
-        if on_peggy2_branch:
-            hardcoded_network_descriptor = "1"  # TODO Don't hardcode me
-            ebrelayer_proc = ebrelayer.peggy2_init_relayer(
-                hardcoded_network_descriptor,
-                tcp_url,
-                web3_provider,
-                peggy_sc_addrs.bridge_registry,
-                validator_moniker,
-                validator_mnemonic,
-                chain_id,
-                symbol_translator_file,
-                ethereum_address,
-                ethereum_private_key,
-                keyring_backend="test",
-                log_file=ebrelayer_log_file,
-                cwd=None,
-            )
-            log.debug("Started ebrelayer: pid={}".format(ebrelayer_proc.pid))
-            witness_proc = ebrelayer.peggy2_init_witness(
-                hardcoded_network_descriptor,
-                tcp_url,
-                web3_provider,
-                peggy_sc_addrs.bridge_registry,
-                validator_moniker,
-                validator_mnemonic,
-                chain_id,
-                symbol_translator_file,
-                ethereum_address,
-                ethereum_private_key,
-                relayerdb_path=relayerdb_path,
-                keyring_backend="test",
-                log_file=witness_log_file,
-                cwd=None,
-            )
-            log.debug("Started witness: pid={}".format(witness_proc.pid))
+        env_vars = {
+            # Computed
+            "BASEDIR": self.project.base_dir,
+            "GOBIN": self.project.go_bin_dir,
+            "CHAINDIR": chain_dir,
 
-            env_vars = {
-                # Computed
-                "BASEDIR": self.project.base_dir,
-                "GOBIN": self.project.go_bin_dir,
-                "CHAINDIR": chain_dir,
+            # Ethereum
+            "ETHEREUM_ADDRESS": hardhat_accounts["available"][0][0],
+            "ETHEREUM_PRIVATE_KEY": "0x" + hardhat_accounts["available"][0][1],
+            "ROWAN_SOURCE": "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+            "ETH_ACCOUNT_OPERATOR_ADDRESS": hardhat_accounts["operator"][0],
+            "ETH_ACCOUNT_OPERATOR_PRIVATEKEY": "0x" + hardhat_accounts["operator"][1],
+            "ETH_ACCOUNT_OWNER_ADDRESS": hardhat_accounts["owner"][0],
+            "ETH_ACCOUNT_OWNER_PRIVATEKEY": "0x" + hardhat_accounts["owner"][1],
+            "ETH_ACCOUNT_PAUSER_ADDRESS": hardhat_accounts["pauser"][0],
+            "ETH_ACCOUNT_PAUSER_PRIVATEKEY": "0x" + hardhat_accounts["pauser"][1],
+            "ETH_ACCOUNT_PROXYADMIN_ADDRESS": hardhat_accounts["proxy_admin"][0],
+            "ETH_ACCOUNT_PROXYADMIN_PRIVATEKEY": "0x" + hardhat_accounts["proxy_admin"][1],
+            "ETH_ACCOUNT_VALIDATOR_ADDRESS": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
+            "ETH_ACCOUNT_VALIDATOR_PRIVATEKEY": "0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6",
+            "ETH_CHAIN_ID": hardhat_chain_id,
+            "ETH_HOST": hardhat_hostname,
+            "ETH_PORT": hardhat_port,
 
-                # Ethereum
-                "ETHEREUM_ADDRESS": hardhat_accounts["available"][0][0],
-                "ETHEREUM_PRIVATE_KEY": "0x" + hardhat_accounts["available"][0][1],
-                "ROWAN_SOURCE": "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
-                "ETH_ACCOUNT_OPERATOR_ADDRESS": hardhat_accounts["operator"][0],
-                "ETH_ACCOUNT_OPERATOR_PRIVATEKEY": "0x" + hardhat_accounts["operator"][1],
-                "ETH_ACCOUNT_OWNER_ADDRESS": hardhat_accounts["owner"][0],
-                "ETH_ACCOUNT_OWNER_PRIVATEKEY": "0x" + hardhat_accounts["owner"][1],
-                "ETH_ACCOUNT_PAUSER_ADDRESS": hardhat_accounts["pauser"][0],
-                "ETH_ACCOUNT_PAUSER_PRIVATEKEY": "0x" + hardhat_accounts["pauser"][1],
-                "ETH_ACCOUNT_PROXYADMIN_ADDRESS": hardhat_accounts["proxy_admin"][0],
-                "ETH_ACCOUNT_PROXYADMIN_PRIVATEKEY": "0x" + hardhat_accounts["proxy_admin"][1],
-                "ETH_ACCOUNT_VALIDATOR_ADDRESS": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
-                "ETH_ACCOUNT_VALIDATOR_PRIVATEKEY": "0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6",
-                "ETH_CHAIN_ID": hardhat_chain_id,
-                "ETH_HOST": hardhat_hostname,
-                "ETH_PORT": hardhat_port,
+            # Smart contracts
+            "BRIDGE_BANK_ADDRESS": peggy_sc_addrs.bridge_bank,
+            "BRIDGE_REGISTERY_ADDRESS": peggy_sc_addrs.bridge_registry,
+            "COSMOS_BRIDGE_ADDRESS": peggy_sc_addrs.cosmos_bridge,
+            "ROWANTOKEN_ADDRESS": peggy_sc_addrs.rowan,
+            "BRIDGE_TOKEN_ADDRESS": peggy_sc_addrs.rowan,
 
-                # Smart contracts
-                "BRIDGE_BANK_ADDRESS": peggy_sc_addrs.bridge_bank,
-                "BRIDGE_REGISTERY_ADDRESS": peggy_sc_addrs.bridge_registry,
-                "COSMOS_BRIDGE_ADDRESS": peggy_sc_addrs.cosmos_bridge,
-                "ROWANTOKEN_ADDRESS": peggy_sc_addrs.rowan,
-                "BRIDGE_TOKEN_ADDRESS": peggy_sc_addrs.rowan,
+            # Sifnode
+            "TCP_URL": tcp_url,
+            "VALIDATOR_ADDRESS": netdef["validator_address"],
+            "VALIDATOR_CONSENSUS_ADDRESS": netdef["validator_consensus_address"],
+            "VALIDATOR_MENOMONIC": " ".join(validator_mnemonic),  # == netdef["validator_mnemonic"]
+            "VALIDATOR_MONIKER": validator_moniker,  # == netdef["validator_moniker"]
+            "VALIDATOR_PASSWORD": netdef["password"],
+            "VALIDATOR_PUB_KEY": netdef["pub_key"],
+        }
 
-                # Sifnode
-                "TCP_URL": tcp_url,
-                "VALIDATOR_ADDRESS": netdef["validator_address"],
-                "VALIDATOR_CONSENSUS_ADDRESS": netdef["validator_consensus_address"],
-                "VALIDATOR_MENOMONIC": " ".join(validator_mnemonic),  # == netdef["validator_mnemonic"]
-                "VALIDATOR_MONIKER": validator_moniker,  # == netdef["validator_moniker"]
-                "VALIDATOR_PASSWORD": netdef["password"],
-                "VALIDATOR_PUB_KEY": netdef["pub_key"],
-            }
-
-            log.debug("env_vars: " + repr(env_vars))
-            dotenv_file = os.path.join(self.project.smart_contracts_dir, ".env")
-            env_json_file = os.path.join(self.project.smart_contracts_dir, "env.json")
-            environment_json_file = os.path.join(self.project.smart_contracts_dir, "environment.json")
-            self.cmd.write_text_file(dotenv_file, joinlines([
-                "export {}=\"{}\"".format(k, v) for k, v in env_vars.items()]))
-            self.cmd.write_text_file(env_json_file, json.dumps(env_vars, indent=4))
-            self.cmd.write_text_file(environment_json_file, json.dumps(env_vars, indent=4))
-        else:
-            ebrelayer_proc = ebrelayer.init(
-                tcp_url,
-                web3_provider,
-                peggy_sc_addrs.bridge_registry,
-                validator_moniker,
-                validator_mnemonic,
-                chain_id,
-                ethereum_private_key=ethereum_private_key,
-                ethereum_address=ethereum_address,
-                node=tcp_url,
-                keyring_backend="test",
-                sign_with=validator_moniker,
-                symbol_translator_file=symbol_translator_file,
-                relayerdb_path=relayerdb_path,
-                log_file=ebrelayer_log_file,
-            )
-            witness_proc = None
-
-            state_vars = {
-                "BASEDIR": self.project.base_dir,
-                "TEST_INTEGRATION_DIR": project_dir("test/integration"),
-                "ETHEREUM_WEBSOCKET_ADDRESS": web3_provider,
-                "TEST_INTEGRATION_PY_DIR": project_dir("test/integration/src/py"),
-            }
-            vagrantenv_path = project_dir("test/integration/vagrantenv.sh")
-            self.cmd.write_text_file(vagrantenv_path, joinlines(format_as_shell_env_vars(state_vars)))
-            self.cmd.write_text_file(project_dir("test/integration/vagrantenv.json"), json.dumps(state_vars, indent=4))
+        log.debug("env_vars: " + repr(env_vars))
+        dotenv_file = os.path.join(self.project.smart_contracts_dir, ".env")
+        env_json_file = os.path.join(self.project.smart_contracts_dir, "env.json")
+        environment_json_file = os.path.join(self.project.smart_contracts_dir, "environment.json")
+        self.cmd.write_text_file(dotenv_file, joinlines([
+            "export {}=\"{}\"".format(k, v) for k, v in env_vars.items()]))
+        self.cmd.write_text_file(env_json_file, json.dumps(env_vars, indent=4))
+        self.cmd.write_text_file(environment_json_file, json.dumps(env_vars, indent=4))
 
         return hardhat_proc, sifnoded_proc, ebrelayer_proc, witness_proc
 
-    def init_sifchain(self, sifnoded_log_file, chain_id, hardhat_chain_id, mint_amount, validator_power,
-        seed_ip_address, tendermint_port, denom_whitelist_file, tokens, registry_json
+    def init_sifchain(self, sifnoded_network_dir, sifnoded_log_file, chain_id, hardhat_chain_id, mint_amount,
+        validator_power, seed_ip_address, tendermint_port, denom_whitelist_file, tokens, registry_json
     ):
-        sifnoded_network_dir = "/tmp/sifnodedNetwork"
-        self.cmd.rmdir(sifnoded_network_dir)
-        self.cmd.mkdir(sifnoded_network_dir)
-        network_config_file = "/tmp/sifnodedConfig.yml"
         validator_count = 1
         relayer_count = 1
         witness_count = 1
         # TODO Not used
         # rpc_port = 9000
 
-        self.cmd.sifgen_create_network(chain_id, validator_count, sifnoded_network_dir, network_config_file, seed_ip_address, mint_amount=mint_amount)
-        validators = yaml_load(self.cmd.read_text_file(network_config_file))
+        network_config_file_path = self.cmd.mktempfile()
+        try:
+            self.cmd.sifgen_create_network(chain_id, validator_count, sifnoded_network_dir, network_config_file_path,
+                seed_ip_address, mint_amount=mint_amount)
+            network_config_file = self.cmd.read_text_file(network_config_file_path)
+        finally:
+            self.cmd.rm(network_config_file_path)
+        validators = yaml_load(network_config_file)
 
         # netdef_yml is a list of generated validators like below.
         # Each one has its unique IP (starting with base IP + 1), the first one also has is_seed=True.
@@ -1107,11 +1053,12 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             ethereum_cross_chain_fee_token, cross_chain_fee_base, cross_chain_lock_fee, cross_chain_burn_fee,
             admin_account_name, chain_id, gas_prices, gas_adjustment, sifnoded_home=validator0_home)
 
-        return sifnoded_proc, tcp_url, admin_account_address, validators, relayers, witnesses, validator0_home
+        return network_config_file, sifnoded_proc, tcp_url, admin_account_address, validators, relayers, witnesses,\
+            validator0_home
 
-    def start_witnesses_and_relayers(self, hardhat_port, web3_websocket_address, hardhat_chain_id, tcp_url, chain_id,
-        peggy_sc_addrs, evm_validator_accounts, sifnode_validators, sifnode_relayers, sifnode_witnesses,
-        sifnode_validator0_home, symbol_translator_file, relayer_log_file, witness_log_file
+    def start_witnesses_and_relayers(self, web3_websocket_address, hardhat_chain_id, tcp_url, chain_id, peggy_sc_addrs,
+        evm_validator_accounts, sifnode_validators, sifnode_relayers, sifnode_witnesses, sifnode_validator0_home,
+        symbol_translator_file, relayer_log_file, witness_log_file
     ):
         # For now we assume a single validator
         evm_validator0_addr, evm_validator0_key = exactly_one(evm_validator_accounts)
@@ -1136,12 +1083,6 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         bridge_bank_contract_addr = peggy_sc_addrs.bridge_bank
         cosmos_bridge_contract_addr = peggy_sc_addrs.cosmos_bridge
         rowan_contract_addr = peggy_sc_addrs.rowan
-
-        assert hardhat_port == 8545
-        assert web3_websocket_address == "ws://localhost:8545/"
-        assert hardhat_chain_id == 31337
-        assert tcp_url == "tcp://0.0.0.0:26657"
-        assert chain_id == "localnet"
 
         self.cmd.wait_for_sif_account_up(sifnode_validator0_address, tcp_url=tcp_url)  # Required for both relayer and witness
 
@@ -1215,7 +1156,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             home=sifnode_witness0_home,
         )
 
-        return relayer0_proc, witness0_proc
+        return [relayer0_proc], [witness0_proc]
 
     def start_hardhat(self, hostname, port, log_file):
         return self.hardhat.start(hostname=hostname, port=port, log_file=log_file)
@@ -1230,6 +1171,12 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         for sc_name, sc_addr in smart_contract_addresses.items():
             self.cmd.write_text_file(os.path.join(d, f"{sc_name}.json"), json.dumps({
                 "networks": {str(integration_tests_expected_network_id): {"address": sc_addr}}}, indent=4))
+
+    def env_json_writer(self, basedir=None):
+        tmp = [] + \
+            ([["BASEDIR", basedir]] if basedir is not None else []) + \
+        
+
 
 class IBCEnvironment(IntegrationTestsEnvironment):
     def __init__(self, cmd):
