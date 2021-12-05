@@ -1359,7 +1359,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
                         evm_smart_contract_addrs.bridge_registry,
                         witness["name"],
                         "--chain-id", "localnet",
-                        "--node", tcp_url
+                        "--node", tcp_url,
                         "--keyring-backend", "test",
                         "--from", admin_account_address,
                         "--symbol-translator-file", "${workspaceFolder}/test/integration/config/symbol_translator.json",
