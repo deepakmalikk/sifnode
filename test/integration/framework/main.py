@@ -1195,8 +1195,12 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         admin_account_address, sifnode_validator0_home, sifnode_validators, sifnode_relayers, sifnode_witnesses,
         tcp_url, hardhat_bind_hostname, hardhat_port, hardhat_chain_id, chain_dir_base
     ):
+        eth_chain_id = 1  # TODO Should probably be hardhat_chain_id (31337)
+        w3_url = f"ws://{hardhat_bind_hostname}:{hardhat_port}/"
+
         def format_eth_account(eth_account):
-            return {"address": eth_account[0], "privateKey": eth_account[1]}
+            assert eth_account[0].starts_with("0x") and not eth_account[1].starts_with("0x")
+            return {"address": eth_account[0], "privateKey": "0x" + eth_account[1]}
 
         def format_sif_account(sif_account):
             return {"account": sif_account["address"], "name": sif_account["name"], "homeDir": sif_account["home"]}
@@ -1224,7 +1228,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
                 },
                 "httpHost": hardhat_bind_hostname,
                 "httpPort": hardhat_port,
-                "chainId": 1,  # TODO Should probably be hardhat_chain_id (31337)
+                "chainId": eth_chain_id,
             },
             "goResults": {
                 # "completed": True,
@@ -1241,18 +1245,161 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             }
         }
 
-        dot_env = {
+        dot_env = dict_merge({
             "BASEDIR": project_dir,
-            "CHAINDIR": chain_dir_base,
-            "HOME": chain_dir_base,
-            "TCP_URL": tcp_url,
-            "GOBIN": go_bin_dir,
-            "BRIDGE_BANK_ADDRESS": evm_smart_contract_addrs.bridge_bank,
-            # TODO Typo, should be "BRIDGE_REGISTRY_ADDRESS"
-            "BRIDGE_REGISTERY_ADDRESS": evm_smart_contract_addrs.bridge_registry,
+            "ETHEREUM_ADDRESS": eth_accounts["available"][0],
+            "ETHEREUM_PRIVATE_KEY": "0x" + eth_accounts["available"][1],
+            "ETH_ACCOUNT_OPERATOR_ADDRESS": eth_accounts["operator"][0],
+            "ETH_ACCOUNT_OPERATOR_PRIVATEKEY": "0x" + eth_accounts["operator"][1],
+            "ETH_ACCOUNT_OWNER_ADDRESS": eth_accounts["owner"][0],
+            "ETH_ACCOUNT_OWNER_PRIVATEKEY": "0x" + eth_accounts["owner"][1],
+            "ETH_ACCOUNT_PAUSER_ADDRESS": eth_accounts["pauser"][0],
+            "ETH_ACCOUNT_PAUSER_PRIVATEKEY": "0x" + eth_accounts["pauser"][1],
+            "ETH_ACCOUNT_PROXYADMIN_ADDRESS": eth_accounts["proxy_admin"][0],
+            "ETH_ACCOUNT_PROXYADMIN_PRIVATEKEY": "0x" + eth_accounts["proxy_admin"][1],
+            "ETH_ACCOUNT_VALIDATOR_ADDRESS": eth_accounts["validators"][0][0],
+            "ETH_ACCOUNT_VALIDATOR_PRIVATEKEY": "0x" + eth_accounts["validators"][0][1],
+            "ETH_CHAIN_ID": str(eth_chain_id),
+            "ETH_HOST": hardhat_bind_hostname,
+            "ETH_PORT": str(hardhat_port),
+            "ROWAN_SOURCE": admin_account_address,
+            "BRIDGE_REGISTERY_ADDRESS": evm_smart_contract_addrs.bridge_registry, # TODO Typo, should be "BRIDGE_REGISTRY_ADDRESS"
             "COSMOS_BRIDGE_ADDRESS": evm_smart_contract_addrs.cosmos_bridge,
             "ROWANTOKEN_ADDRESS": evm_smart_contract_addrs.rowan,
             "BRIDGE_TOKEN_ADDRESS": evm_smart_contract_addrs.rowan,
+            "GOBIN": go_bin_dir,
+            "TCP_URL": tcp_url,
+            "VALIDATOR_ADDRESS": sifnode_validators[0]["address"],
+            "VALIDATOR_CONSENSUS_ADDRESS": sifnode_validators[0]["validator_consensus_address"],
+            "VALIDATOR_MENOMONIC": sifnode_validators[0]["mnemonic"],
+            "VALIDATOR_MONIKER": sifnode_validators[0]["moniker"],
+            "VALIDATOR_PASSWORD": sifnode_validators[0]["password"],
+            "VALIDATOR_PUB_KEY": sifnode_validators[0]["pub_key"],
+            "ADMIN_ADDRESS": admin_account_address,
+            "ADMIN_NAME": admin_account_name,
+            "CHAINDIR": chain_dir_base,
+            "HOME": chain_dir_base,
+        }, *[{
+            f"ETHEREUM_ADDRESS_{i}", account[0],
+            f"ETHEREUM_PRIVATE_KEY_{i}", "0x" + account[1],
+        } for i, account in enumerate(eth_accounts["available"])], *[{
+            f"ETH_ACCOUNT_VALIDATOR_{i}_ADDRESS": account[0],
+            f"ETH_ACCOUNT_VALIDATOR_{i}_PRIVATEKEY": "0x" + account[1],
+        } for i, account in enumerate(eth_accounts["validators"])], *[{
+            f"VALIDATOR_ADDRESS_{i}": validator["address"],
+            f"VALIDATOR_CONSENSUS_ADDRESS_{i}": validator["validator_consensus_address"],
+            f"VALIDATOR_MENOMONIC_{i}": validator["mnemonic"],
+            f"VALIDATOR_MONIKER_{i}": validator["moniker"],
+            f"VALIDATOR_PASSWORD_{i}": validator["password"],
+            f"VALIDATOR_PUB_KEY_{i}": validator["pub_key"],
+        } for i, validator in enumerate(sifnode_validators)], *[{
+            f"RELAYER_ADDRESS_{i}": relayer["address"],
+            f"RELAYER_NAME_{i}": relayer["name"],
+        } for i, relayer in enumerate(sifnode_relayers)], *[{
+            f"WITNESS_ADDRESS_{i}": witness["address"],
+            f"WITNESS_NAME_{i}": witness["name"],
+        } for i, witness in enumerate(sifnode_witnesses)])
+
+        launch_json = {
+            "version": "0.2.0",
+            "configurations": [dict_merge(
+                {
+                    "runtimeArgs": ["node_modules/.bin/hardhat", "run"],
+                    "cwd": project_dir("smart-contracts"),
+                    "type": "node",
+                    "request": "launch",
+                    "name": "Debug DevENV scripts",
+                    "skipFiles": ["<node_internals>/**"],
+                    "program": project_dir("smart-contracts/scripts/devenv.ts")
+                }, {
+                    "runtimeArgs": ["node_modules/.bin/hardhat", "test"],
+                    "args": ["--network", "localhost"],
+                    "cwd": project_dir("smart-contracts"),
+                    "type": "node",
+                    "request": "launch",
+                    "name": "Typescript Tests",
+                    "skipFiles": ["<node_internals>/**"],
+                    "program": project_dir("smart-contracts/test/watcher/watcher.ts")
+                }, *[{
+                    "name": f"Debug Relayer-{i}",
+                    "type": "go",
+                    "request": "launch",
+                    "mode": "debug",
+                    "program": "cmd/ebrelayer",
+                    "envFile": "${workspaceFolder}/smart-contracts/.env",
+                    "env": {"ETHEREUM_PRIVATE_KEY": eth_accounts["available"][i][1]},
+                    "args": [
+                        "init-relayer",
+                        "--network-descriptor", str(eth_chain_id),
+                        "--tendermint-node", tcp_url,
+                        "--web3-provider", w3_url,
+                        "--bridge-registry-contract-address", evm_smart_contract_addrs.bridge_registry,
+                        "--validator-mnemonic", relayer["name"],
+                        "--chain-id", "localnet",
+                        "--node", tcp_url,
+                        "--keyring-backend", "test",
+                        "--from", admin_account_address,
+                        "--symbol-translator-file", "${workspaceFolder}/test/integration/config/symbol_translator.json",
+                        "--relayerdb-path", f"./relayer-{i}",
+                        "--home", relayer["home"]
+                    ]
+                } for i, relayer in enumerate(sifnode_relayers)], *[{
+                    "name": f"Debug Witness-{i}",
+                    "type": "go",
+                    "request": "launch",
+                    "mode": "debug",
+                    "program": "cmd/ebrelayer",
+                    "envFile": "${workspaceFolder}/smart-contracts/.env",
+                    "env": {"ETHEREUM_PRIVATE_KEY": eth_accounts["available"][i][1]},
+                    "args": [
+                        "init-witness",
+                        str(eth_chain_id),
+                        tcp_url,
+                        w3_url,
+                        evm_smart_contract_addrs.bridge_registry,
+                        witness["name"],
+                        "--chain-id", "localnet",
+                        "--node", tcp_url
+                        "--keyring-backend", "test",
+                        "--from", admin_account_address,
+                        "--symbol-translator-file", "${workspaceFolder}/test/integration/config/symbol_translator.json",
+                        "--relayerdb-path", f"./witness-{i}",
+                        "--home", witness["home"]
+                    ]
+                } for i, witness in enumerate(sifnode_witnesses)], {
+                    "name": "Debug Sifnoded",
+                    "type": "go",
+                    "request": "launch",
+                    "mode": "debug",
+                    "program": "cmd/sifnoded",
+                    "envFile": "${workspaceFolder}/smart-contracts/.env",
+                    "args": [
+                        "start",
+                        "--log_format", "json",
+                        "--log_level", "debug",
+                        "--minimum-gas-prices", "0.5rowan",
+                        "--rpc.laddr", tcp_url,
+                        "--home", "/tmp/sifnodedNetwork/validators/localnet/{{@root.Dev.sifResults.validatorValues.[0].moniker}}/.sifnoded" # @TODO
+                    ]
+                }, {
+                    "name": "Pytest",
+                    "type": "python",
+                    "request": "launch",
+                    "stopOnEntry": False,
+                    "python": "${command:python.interpreterPath}",
+                    "module": "pytest",
+                    "args": [
+                        "-olog_cli=false",
+                        "-olog_level=DEBUG",
+                        "-olog_file=/tmp/pytest.out",
+                        "-v",
+                        "test/integration/src/py/test_eth_transfers.py::test_eth_to_ceth_and_back_to_eth"
+                    ],
+                    "cwd": "${workspaceRoot}",
+                    "env": dot_env,
+                    "debugOptions": ["WaitOnAbnormalExit", "WaitOnNormalExit", "RedirectOutput"]
+                }
+            )]
         }
 
         return environment_json
