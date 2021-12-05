@@ -795,14 +795,14 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             "available": available,
         }
 
-    def run_ebrelayer_peggy(self, tcp_url, websocket_address, bridge_registry_sc_addr, validator_moniker,
-        validator_mnemonic, chain_id, symbol_translator_file, relayerdb_path, ethereum_address, ethereum_private_key,
-        log_file=None
-    ):
-        return Ebrelayer(self.cmd).init(tcp_url, websocket_address, bridge_registry_sc_addr, validator_moniker,
-            validator_mnemonic, chain_id, ethereum_private_key=ethereum_private_key, ethereum_address=ethereum_address,
-            node=tcp_url, keyring_backend="test", sign_with=validator_moniker,
-            symbol_translator_file=symbol_translator_file, relayerdb_path=relayerdb_path, log_file=log_file)
+    # def run_ebrelayer_peggy(self, tcp_url, websocket_address, bridge_registry_sc_addr, validator_moniker,
+    #     validator_mnemonic, chain_id, symbol_translator_file, relayerdb_path, ethereum_address, ethereum_private_key,
+    #     log_file=None
+    # ):
+    #     return Ebrelayer(self.cmd).init(tcp_url, websocket_address, bridge_registry_sc_addr, validator_moniker,
+    #         validator_mnemonic, chain_id, ethereum_private_key=ethereum_private_key, ethereum_address=ethereum_address,
+    #         node=tcp_url, keyring_backend="test", sign_with=validator_moniker,
+    #         symbol_translator_file=symbol_translator_file, relayerdb_path=relayerdb_path, log_file=log_file)
 
     # Override
     def run(self):
@@ -844,6 +844,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         hardhat_chain_id = 31337
         hardhat_accounts = self.signer_array_to_ethereum_accounts(Hardhat.default_accounts(), hardhat_validator_count)
 
+        admin_account_name = "sifnodeadmin"
         chain_id = "localnet"
         # Mint goes to validator
         mint_amount = [
@@ -863,10 +864,11 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         sifnoded_network_dir = "/tmp/sifnodedNetwork"
         self.cmd.rmdir(sifnoded_network_dir)
         self.cmd.mkdir(sifnoded_network_dir)
-        network_config_file, sifnoded_proc, tcp_url, admin_account_address, sifnode_validator_addrs, sifnode_relayers, \
-            sifnode_witnesses, sifnode_validator0_home = \
+        network_config_file, sifnoded_proc, tcp_url, admin_account_address, sifnode_validators, sifnode_relayers, \
+            sifnode_witnesses, sifnode_validator0_home, chain_dir_base = \
         self.init_sifchain(sifnoded_network_dir, sifnoded_log_file, chain_id, hardhat_chain_id, mint_amount,
-            validator_power, seed_ip_address, tendermint_port, denom_whitelist_file, tokens, registry_json)
+            validator_power, seed_ip_address, tendermint_port, denom_whitelist_file, tokens, registry_json,
+            admin_account_name)
 
         self.hardhat.compile_smart_contracts()
         peggy_sc_addrs = self.hardhat.deploy_smart_contracts()
@@ -875,21 +877,34 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         symbol_translator_file = os.path.join(self.test_integration_dir, "config", "symbol_translator.json")
         [relayer0_proc], [witness0_proc] = \
         self.start_witnesses_and_relayers(w3_websocket_address, hardhat_chain_id, tcp_url,
-            chain_id, peggy_sc_addrs, hardhat_accounts["validators"], sifnode_validator_addrs, sifnode_relayers,
-            sifnode_witnesses, sifnode_validator0_home, symbol_translator_file, relayer_log_file, witness_log_file)
+            chain_id, peggy_sc_addrs, hardhat_accounts["validators"], sifnode_validators, sifnode_relayers,
+            sifnode_witnesses, symbol_translator_file, relayer_log_file, witness_log_file)
 
         self.env_json_writer(
-            basedir=project_dir(),
+            self.project.project_dir(),
+            self.project.go_bin_dir,
+            peggy_sc_addrs,
+            hardhat_accounts,
+            admin_account_name,
+            admin_account_address,
+            sifnode_validator0_home,
+            sifnode_validators,
+            sifnode_relayers,
+            sifnode_witnesses,
+            tcp_url,
+            hardhat_bind_hostname,
+            hardhat_port,
+            hardhat_chain_id,
+            chain_dir_base,
         )
-
-        return  # TODO
-
 
         self.write_compatibility_json_file_with_smart_contract_addresses({
             "BridgeRegistry": peggy_sc_addrs.bridge_registry,
             "BridgeBank": peggy_sc_addrs.bridge_bank,
             # TODO There is no BridgeToken smart contract on Peggy2.0 branch, but there are "cosmos_bridge" and "rowan"
         })
+
+        return  # TODO
 
         relayerdb_path = self.cmd.mktempdir()
         web3_provider = "ws://{}:{}/".format(hardhat_hostname, str(hardhat_port))
@@ -953,7 +968,8 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         return hardhat_proc, sifnoded_proc, ebrelayer_proc, witness_proc
 
     def init_sifchain(self, sifnoded_network_dir, sifnoded_log_file, chain_id, hardhat_chain_id, mint_amount,
-        validator_power, seed_ip_address, tendermint_port, denom_whitelist_file, tokens, registry_json
+        validator_power, seed_ip_address, tendermint_port, denom_whitelist_file, tokens, registry_json,
+        admin_account_name
     ):
         validator_count = 1
         relayer_count = 1
@@ -1002,23 +1018,26 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         validator0_home = os.path.join(chain_dir_base, validator0["moniker"], ".sifnoded")
         validator0_address = validator0["address"]
 
-        # Create an ADMIN account on sifnode with name "sifnodeadmin"
-        admin_account_name = "sifnodeadmin"
+        # Create an ADMIN account on sifnode with name admin_account_name (e.g. "sifnodeadmin")
         admin_account_address = self.cmd.sifnoded_peggy2_add_account(admin_account_name, tokens, is_admin=True,
             sifnoded_home=validator0_home)
 
         # Create an account for each relayer
+        # Note: "--home" is shared with sifnoded's "--home"
         relayers = [{
             "name": name,
             "address": self.cmd.sifnoded_peggy2_add_relayer_witness_account(name, tokens, hardhat_chain_id,
                 validator_power, denom_whitelist_file, sifnoded_home=validator0_home),
+            "home": validator0_home,
         } for name in [f"relayer-{i}" for i in range(relayer_count)]]
 
         # Create an account for each witness
+        # Note: "--home" is shared with sifnoded's "--home"
         witnesses = [{
             "name": name,
             "address": self.cmd.sifnoded_peggy2_add_relayer_witness_account(name, tokens, hardhat_chain_id,
                 validator_power, denom_whitelist_file, sifnoded_home=validator0_home),
+            "home": validator0_home,
         } for name in [f"witness-{i}" for i in range(witness_count)]]
 
         tcp_url = "tcp://{}:{}".format(ANY_ADDR, tendermint_port)
@@ -1053,12 +1072,12 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             ethereum_cross_chain_fee_token, cross_chain_fee_base, cross_chain_lock_fee, cross_chain_burn_fee,
             admin_account_name, chain_id, gas_prices, gas_adjustment, sifnoded_home=validator0_home)
 
-        return network_config_file, sifnoded_proc, tcp_url, admin_account_address, validators, relayers, witnesses,\
-            validator0_home
+        return network_config_file, sifnoded_proc, tcp_url, admin_account_address, validators, relayers, witnesses, \
+            validator0_home, chain_dir_base
 
     def start_witnesses_and_relayers(self, web3_websocket_address, hardhat_chain_id, tcp_url, chain_id, peggy_sc_addrs,
-        evm_validator_accounts, sifnode_validators, sifnode_relayers, sifnode_witnesses, sifnode_validator0_home,
-        symbol_translator_file, relayer_log_file, witness_log_file
+        evm_validator_accounts, sifnode_validators, sifnode_relayers, sifnode_witnesses, symbol_translator_file,
+        relayer_log_file, witness_log_file
     ):
         # For now we assume a single validator
         evm_validator0_addr, evm_validator0_key = exactly_one(evm_validator_accounts)
@@ -1069,12 +1088,12 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         sifnode_relayer0 = exactly_one(sifnode_relayers)
         sifnode_relayer0_mnemonic = sifnode_relayer0["name"]
         sifnode_relayer0_address = sifnode_relayer0["address"]
-        sifnode_relayer0_home = sifnode_validator0_home  # Relayer uses sifnoded's home
+        sifnode_relayer0_home = sifnode_relayer0["home"]
 
         sifnode_witness0 = exactly_one(sifnode_witnesses)
         sifnode_witness0_mnemonic = sifnode_witness0["name"]
         sifnode_witness0_address = sifnode_witness0["address"]
-        sifnode_witness0_home = sifnode_validator0_home  # Witness uses sifnoded's home
+        sifnode_witness0_home = sifnode_witness0["home"]
         sifnode_witness0_db_path = project_dir("smart-contracts", "witnessdb")
         self.cmd.rmdir(sifnode_witness0_db_path)
         self.cmd.mkdir(sifnode_witness0_db_path)
@@ -1172,10 +1191,71 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             self.cmd.write_text_file(os.path.join(d, f"{sc_name}.json"), json.dumps({
                 "networks": {str(integration_tests_expected_network_id): {"address": sc_addr}}}, indent=4))
 
-    def env_json_writer(self, basedir=None):
-        tmp = [] + \
-            ([["BASEDIR", basedir]] if basedir is not None else []) + \
-        
+    def env_json_writer(self, project_dir, go_bin_dir, evm_smart_contract_addrs, eth_accounts, admin_account_name,
+        admin_account_address, sifnode_validator0_home, sifnode_validators, sifnode_relayers, sifnode_witnesses,
+        tcp_url, hardhat_bind_hostname, hardhat_port, hardhat_chain_id, chain_dir_base
+    ):
+        def format_eth_account(eth_account):
+            return {"address": eth_account[0], "privateKey": eth_account[1]}
+
+        def format_sif_account(sif_account):
+            return {"account": sif_account["address"], "name": sif_account["name"], "homeDir": sif_account["home"]}
+
+        environment_json = {
+            "contractResults": {
+                # "completed": True,
+                # "output": "...",
+                "contractAddresses": {
+                    "cosmosBridge": evm_smart_contract_addrs.cosmos_bridge,
+                    "bridgeBank": evm_smart_contract_addrs.bridge_bank,
+                    "bridgeRegistry": evm_smart_contract_addrs.bridge_registry,
+                    "rowanContract": evm_smart_contract_addrs.rowan,
+                }
+            },
+            "ethResults": {
+                # "process": { ... },
+                "accounts": {
+                    "proxyAdmin": format_eth_account(eth_accounts["proxy_admin"]),
+                    "operator": format_eth_account(eth_accounts["operator"]),
+                    "owner": format_eth_account(eth_accounts["owner"]),
+                    "pauser": format_eth_account(eth_accounts["pauser"]),
+                    "validators": [format_eth_account(a) for a in eth_accounts("validators")],
+                    "available": [format_eth_account(a) for a in eth_accounts("available")],
+                },
+                "httpHost": hardhat_bind_hostname,
+                "httpPort": hardhat_port,
+                "chainId": 1,  # TODO Should probably be hardhat_chain_id (31337)
+            },
+            "goResults": {
+                # "completed": True,
+                # "output": "...",
+                "goBin": go_bin_dir
+            },
+            "sifResults": {
+                "validatorValues": sifnode_validators,
+                "adminAddress": format_sif_account({"address": admin_account_address, "name": admin_account_name, "home": sifnode_validator0_home}),
+                "relayerAddresses": [format_sif_account(a) for a in sifnode_validators],
+                "witnessAddresses": [format_sif_account(a) for a in sifnode_witnesses],
+                # "process": { ... },
+                "tcpurl": tcp_url,
+            }
+        }
+
+        dot_env = {
+            "BASEDIR": project_dir,
+            "CHAINDIR": chain_dir_base,
+            "HOME": chain_dir_base,
+            "TCP_URL": tcp_url,
+            "GOBIN": go_bin_dir,
+            "BRIDGE_BANK_ADDRESS": evm_smart_contract_addrs.bridge_bank,
+            # TODO Typo, should be "BRIDGE_REGISTRY_ADDRESS"
+            "BRIDGE_REGISTERY_ADDRESS": evm_smart_contract_addrs.bridge_registry,
+            "COSMOS_BRIDGE_ADDRESS": evm_smart_contract_addrs.cosmos_bridge,
+            "ROWANTOKEN_ADDRESS": evm_smart_contract_addrs.rowan,
+            "BRIDGE_TOKEN_ADDRESS": evm_smart_contract_addrs.rowan,
+        }
+
+        return environment_json
 
 
 class IBCEnvironment(IntegrationTestsEnvironment):

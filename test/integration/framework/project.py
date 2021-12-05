@@ -90,6 +90,12 @@ class Project:
         # Typically we want any npx commands to inherit stdout and strerr
         return self.cmd.execst(["npx"] + args, env=env, cwd=cwd, pipe=pipe)
 
+    def run_peggy2_js_tests(self):
+        # See smart-contracts/TEST.md:
+        # 1. start environment
+        # 2. npx hardhat test test/devenv/test_lockburn.ts --network localhost
+        pass
+
     # IntegrationEnvironment
     # TODO Merge
     def make_go_binaries(self):
