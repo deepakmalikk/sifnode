@@ -88,6 +88,11 @@ class Project:
         # self.cmd.execst(["npm", "install", "-g", "ganache-cli", "dotenv", "yarn"], cwd=self.smart_contracts_dir)
         self.install_smart_contracts_dependencies()
 
+        # Remove go dependencies and re-download them (GOPATH=~/go)
+        # rm -rv ~/go
+        # mkdir ~/go
+        # cd $PROJECT_DIR && go get -v -t -d ./...
+
     def yarn(self, args, cwd=None, env=None):
         return self.cmd.execst(["yarn"] + args, cwd=cwd, env=env, pipe=False)
 
