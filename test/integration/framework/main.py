@@ -861,7 +861,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             [2 * 10**19, "ceth"]
         ]
         registry_json = project_dir("smart-contracts", "src", "devenv", "registry.json")
-        sifnoded_network_dir = "/tmp/sifnodedNetwork"
+        sifnoded_network_dir = "/tmp/sifnodedNetwork"  # Gets written to .vscode/launch.json
         self.cmd.rmdir(sifnoded_network_dir)
         self.cmd.mkdir(sifnoded_network_dir)
         network_config_file, sifnoded_proc, tcp_url, admin_account_address, sifnode_validators, sifnode_relayers, \
@@ -1300,6 +1300,8 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             f"WITNESS_NAME_{i}": witness["name"],
         } for i, witness in enumerate(sifnode_witnesses)])
 
+        # VS Code
+
         launch_json = {
             "version": "0.2.0",
             "configurations": [dict_merge(
@@ -1319,7 +1321,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
                     "request": "launch",
                     "name": "Typescript Tests",
                     "skipFiles": ["<node_internals>/**"],
-                    "program": project_dir("smart-contracts/test/watcher/watcher.ts")
+                    "program": "${workspaceFolder}/smart-contracts/test/watcher/watcher.ts",
                 }, *[{
                     "name": f"Debug Relayer-{i}",
                     "type": "go",
@@ -1379,7 +1381,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
                         "--log_level", "debug",
                         "--minimum-gas-prices", "0.5rowan",
                         "--rpc.laddr", tcp_url,
-                        "--home", "/tmp/sifnodedNetwork/validators/localnet/{{@root.Dev.sifResults.validatorValues.[0].moniker}}/.sifnoded" # @TODO
+                        "--home", sifnode_validator0_home
                     ]
                 }, {
                     "name": "Pytest",
@@ -1401,6 +1403,52 @@ class Peggy2Environment(IntegrationTestsEnvironment):
                 }
             )]
         }
+
+        # IntelliJ
+
+        def render_intellij_run_xml(name, joined_args, package, filepath, envs):
+            def q(s):
+                return s  # TODO Qoute/escape
+
+            return [
+                "<component name=\"ProjectRunConfigurationManager\">",
+                "  <configuration default=\"false\" name=\"" + q(name) + "\" type=\"GoApplicationRunConfiguration\" factoryName=\"Go Application\">",
+                "    <module name=\"sifnode\" />",
+                "    <working_directory value=\"$PROJECT_DIR$\" />",
+                "    <parameters value=\"" + q(joined_args) + "\" />",
+            ] + ((
+                ["    <envs>"] +
+                ["      <env name=\"" + q(k) + "\" value=\"" + q(v) + "\" />" for k, v in envs.items()] +
+                ["    </envs>"]
+            ) if envs else []) + [
+                "    <envs>",
+                "      <env name=\"ETHEREUM_PRIVATE_KEY\" value=\"{{@root.env.ETHEREUM_PRIVATE_KEY}}\" />",
+                "    </envs>",
+                "    <kind value=\"PACKAGE\" />",
+                "    <package value=\"" + q(package) + "\" />",
+                "    <directory value=\"$PROJECT_DIR$\" />",
+                "    <filePath value=\"" + q(filepath) + "\" />",
+                "    <method v=\"2\" />",
+                "  </configuration>",
+                "</component>",
+            ]
+
+        tmp = []
+        for config in launch_json["configurations"]:
+            if config["name"].startswith("Debug Relayer"):
+                tmp.append(render_intellij_run_xml(
+                    "ebrelayer devenv",
+                    " ".join(config["args"]),
+                    "github.com/Sifchain/sifnode/cmd/ebrelayer",
+                    "$PROJECT_DIR$/cmd/ebrelayer/main.go",
+                    {"ETHEREUM_PRIVATE_KEY": dot_env["ETHEREUM_PRIVATE_KEY"]}))
+            elif config["name"].startswith("Debug Sifnoded"):
+                tmp.append(render_intellij_run_xml(
+                    "sifnode devenv",
+                    " ".join(config["args"]),
+                    "github.com/Sifchain/sifnode/cmd/sifnoded",
+                    "$PROJECT_DIR$/cmd/sifnoded/main.go",
+                    {}))
 
         return environment_json
 

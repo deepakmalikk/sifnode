@@ -80,6 +80,11 @@ class Project:
         self.__rmdir(self.cmd.get_user_home(".sifnoded"))
         self.__rmdir(self.cmd.get_user_home(".sifnode-integration"))
         self.__rmdir(project_dir("smart-contracts/node_modules"))
+
+        if on_peggy2_branch:
+            # Generated Go stubs (by smart-contracts/Makefile)
+            self.__rmdir(project_dir("cmd", "ebrelayer", "contract", "generated"))
+
         # self.cmd.execst(["npm", "install", "-g", "ganache-cli", "dotenv", "yarn"], cwd=self.smart_contracts_dir)
         self.install_smart_contracts_dependencies()
 
