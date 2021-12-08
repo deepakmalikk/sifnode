@@ -883,7 +883,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         # In the future, we want to have one descriptor for entire environment.
         # It should be able to support multiple EVM and multiple Cosmos chains, including all neccessary bridges and
         # relayers. For now this is just a prototype which is not used yet.
-        peggy2_environment = {
+        _unused_peggy2_environment = {
             "admin": {
                 "name": admin_account_name,
                 "address": admin_account_address,
@@ -1075,6 +1075,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             "address": self.cmd.sifnoded_peggy2_add_relayer_witness_account(name, tokens, hardhat_chain_id,
                 validator_power, denom_whitelist_file, sifnoded_home=validator0_home),
             "home": validator0_home,
+            "db_path": project_dir("smart-contracts", "witnessdb"),
         } for name in [f"witness-{i}" for i in range(witness_count)]]
 
         tcp_url = "tcp://{}:{}".format(ANY_ADDR, tendermint_port)
@@ -1132,7 +1133,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         sifnode_witness0_mnemonic = sifnode_witness0["name"]
         sifnode_witness0_address = sifnode_witness0["address"]
         sifnode_witness0_home = sifnode_witness0["home"]
-        sifnode_witness0_db_path = project_dir("smart-contracts", "witnessdb")
+        sifnode_witness0_db_path = sifnode_witness0["db_path"]
         self.cmd.rmdir(sifnode_witness0_db_path)
         self.cmd.mkdir(sifnode_witness0_db_path)
 
@@ -1211,7 +1212,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             log_format="json",
             home=sifnode_witness0_home,
         )
-        witness0_proc = self.cmd.popen(**relayer0_exec_args, log_file=witness_log_file)
+        witness0_proc = self.cmd.popen(**witness0_exec_args, log_file=witness_log_file)
 
         return [relayer0_proc], [witness0_proc]
 
