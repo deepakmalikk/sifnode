@@ -31,21 +31,24 @@ func TestKeeper_GetMTP(t *testing.T) {
 }
 
 func TestKeeper_GetMTPIterator(t *testing.T) {
-	_, app := test.CreateTestAppMargin(false)
+	ctx, app := test.CreateTestAppMargin(false)
 	marginKeeper := app.MarginKeeper
 	assert.NotNil(t, marginKeeper)
+	marginKeeper.GetMTPIterator(ctx)
 }
 
 func TestKeeper_GetMTPs(t *testing.T) {
-	_, app := test.CreateTestAppMargin(false)
+	ctx, app := test.CreateTestAppMargin(false)
 	marginKeeper := app.MarginKeeper
 	assert.NotNil(t, marginKeeper)
+	marginKeeper.GetMTPs(ctx)
 }
 
 func TestKeeper_GetMTPsForAsset(t *testing.T) {
-	_, app := test.CreateTestAppMargin(false)
+	ctx, app := test.CreateTestAppMargin(false)
 	marginKeeper := app.MarginKeeper
 	assert.NotNil(t, marginKeeper)
+	marginKeeper.GetMTPsForAsset(ctx, "xxx")
 }
 
 func TestKeeper_GetAssetsForMTP(t *testing.T) {
@@ -55,8 +58,9 @@ func TestKeeper_GetAssetsForMTP(t *testing.T) {
 }
 
 func TestKeeper_DestroyMTP(t *testing.T) {
-	_, app := test.CreateTestAppMargin(false)
+	ctx, app := test.CreateTestAppMargin(false)
 	marginKeeper := app.MarginKeeper
 	assert.NotNil(t, marginKeeper)
+	marginKeeper.DestroyMTP(ctx, "xxx", "xxx")
 }
 
