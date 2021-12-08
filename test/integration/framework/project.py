@@ -67,6 +67,8 @@ class Project:
         # self.cmd.rmdir(self.project_dir("deploy/networks"))
         # self.cmd.rmdir(self.project_dir("smart-contracts/.openzeppelin"))
 
+        # docker image rm tendermintdev/sdk-proto-gen (used by Makefile on peggy2, used for "buf" command to build go bindings from ABI)
+
         # rmdir ~/.cache/yarn
 
     def fullclean(self):
@@ -105,6 +107,10 @@ class Project:
         # 1. start environment
         # 2. npx hardhat test test/devenv/test_lockburn.ts --network localhost
         pass
+
+    # Top-level "make install" should build everything, such as after git clone. If it does not, it's a bug.
+    def make_all(self):
+        self.cmd.execst(["make"], cwd=project_dir(), pipe=False)
 
     # IntegrationEnvironment
     # TODO Merge
