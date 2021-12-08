@@ -1,3 +1,4 @@
+import re
 import os
 import logging
 import subprocess
@@ -79,6 +80,18 @@ def dict_merge(*dicts):
 
 def format_as_shell_env_vars(env, export=True):
     return ["{}{}=\"{}\"".format("export " if export else "", k, v) for k, v in env.items()]
+
+# Recursively transforms template strings containing "${VALUE}". Example:
+# >>> template_transform("You are ${what}!", {"what": "${how} late", "how": "very"})
+# 'You are very late!'
+# Warning: if you use cyclic definitions, this will loop forever.
+def template_transform(s, d):
+    p = re.compile("^(.*?)(\\${(.*?)})(.*)$")
+    while True:
+        m = p.match(s)
+        if not m:
+            return s
+        s = s[0:m.start(2)] + d[m[3]] + s[m.end(2):]
 
 
 on_peggy2_branch = not os.path.exists(project_dir("smart-contracts", "truffle-config.js"))

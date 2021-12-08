@@ -1,6 +1,6 @@
 import json
 import time
-from command import Command
+from command import Command, buildcmd
 from common import *
 
 
@@ -207,10 +207,10 @@ class Ebrelayer:
         self.cmd = cmd
         self.binary = "ebrelayer"
 
-    def peggy2_run_ebrelayer(self, init_what, network_descriptor, tendermint_node, web3_provider,
+    def peggy2_build_ebrelayer_cmd(self, init_what, network_descriptor, tendermint_node, web3_provider,
         bridge_registry_contract_address, validator_mnemonic, chain_id, node=None, keyring_backend=None,
         sign_with=None, symbol_translator_file=None, relayerdb_path=None, log_format=None, extra_args=None,
-        ethereum_private_key=None, ethereum_address=None, home=None, log_file=None, cwd=None
+        ethereum_private_key=None, ethereum_address=None, home=None, cwd=None
     ):
         env = _env_for_ethereum_address_and_key(ethereum_address, ethereum_private_key)
         args = [
@@ -231,7 +231,7 @@ class Ebrelayer:
             (["--home", home] if home else []) + \
             (["--symbol-translator-file", symbol_translator_file] if symbol_translator_file else []) + \
             (["--log_format", log_format] if log_format else [])
-        return self.cmd.popen(args, env=env, cwd=cwd, log_file=log_file)
+        return buildcmd(args, env=env, cwd=cwd)
 
     # Legacy stuff - pre-peggy2
     # Called from IntegrationContext
