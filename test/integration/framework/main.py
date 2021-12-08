@@ -875,10 +875,13 @@ class Peggy2Environment(IntegrationTestsEnvironment):
 
         w3_websocket_address = "ws://localhost:{}/".format(hardhat_port)
         symbol_translator_file = os.path.join(self.test_integration_dir, "config", "symbol_translator.json")
-        [relayer0_proc], [witness0_proc] = \
+        [relayer0_exec_args], [witness0_exec_args] = \
         self.start_witnesses_and_relayers(w3_websocket_address, hardhat_chain_id, tcp_url,
             chain_id, peggy_sc_addrs, hardhat_accounts["validators"], sifnode_validators, sifnode_relayers,
-            sifnode_witnesses, symbol_translator_file, relayer_log_file, witness_log_file)
+            sifnode_witnesses, symbol_translator_file)
+
+        relayer0_proc = self.cmd.popen(**relayer0_exec_args, log_file=relayer_log_file)
+        witness0_proc = self.cmd.popen(**witness0_exec_args, log_file=witness_log_file)
 
         # In the future, we want to have one descriptor for entire environment.
         # It should be able to support multiple EVM and multiple Cosmos chains, including all neccessary bridges and
@@ -920,6 +923,8 @@ class Peggy2Environment(IntegrationTestsEnvironment):
                 hardhat_port,
                 hardhat_chain_id,
                 chain_dir,
+                relayer0_exec_args,
+                witness0_exec_args,
             )
 
         run_dir = self.project.project_dir(".run")
@@ -1115,8 +1120,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             validator0_home, chain_dir
 
     def start_witnesses_and_relayers(self, web3_websocket_address, hardhat_chain_id, tcp_url, chain_id, peggy_sc_addrs,
-        evm_validator_accounts, sifnode_validators, sifnode_relayers, sifnode_witnesses, symbol_translator_file,
-        relayer_log_file, witness_log_file
+        evm_validator_accounts, sifnode_validators, sifnode_relayers, sifnode_witnesses, symbol_translator_file
     ):
         # For now we assume a single validator
         evm_validator0_addr, evm_validator0_key = exactly_one(evm_validator_accounts)
@@ -1138,9 +1142,9 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         self.cmd.mkdir(sifnode_witness0_db_path)
 
         bridge_registry_contract_addr = peggy_sc_addrs.bridge_registry
-        bridge_bank_contract_addr = peggy_sc_addrs.bridge_bank
-        cosmos_bridge_contract_addr = peggy_sc_addrs.cosmos_bridge
-        rowan_contract_addr = peggy_sc_addrs.rowan
+        # bridge_bank_contract_addr = peggy_sc_addrs.bridge_bank
+        # cosmos_bridge_contract_addr = peggy_sc_addrs.cosmos_bridge
+        # rowan_contract_addr = peggy_sc_addrs.rowan
 
         self.cmd.wait_for_sif_account_up(sifnode_validator0_address, tcp_url=tcp_url)  # Required for both relayer and witness
 
@@ -1176,7 +1180,6 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             keyring_backend="test",
             home=sifnode_relayer0_home,
         )
-        relayer0_proc = self.cmd.popen(**relayer0_exec_args, log_file=relayer_log_file)
 
         # Example from devenv:
         # ebrelayer
@@ -1212,9 +1215,8 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             log_format="json",
             home=sifnode_witness0_home,
         )
-        witness0_proc = self.cmd.popen(**witness0_exec_args, log_file=witness_log_file)
 
-        return [relayer0_proc], [witness0_proc]
+        return [relayer0_exec_args], [witness0_exec_args]
 
     def start_hardhat(self, hostname, port, log_file):
         return self.hardhat.start(hostname=hostname, port=port, log_file=log_file)
@@ -1232,7 +1234,8 @@ class Peggy2Environment(IntegrationTestsEnvironment):
 
     def env_json_writer(self, project_dir, go_bin_dir, evm_smart_contract_addrs, eth_accounts, admin_account_name,
         admin_account_address, sifnode_validator0_home, sifnode_validators, sifnode_relayers, sifnode_witnesses,
-        tcp_url, hardhat_bind_hostname, hardhat_port, hardhat_chain_id, chain_dir
+        tcp_url, hardhat_bind_hostname, hardhat_port, hardhat_chain_id, chain_dir, relayer0_exec_args,
+        witness0_exec_args
     ):
         eth_chain_id = hardhat_chain_id
         w3_url = f"ws://{hardhat_bind_hostname}:{hardhat_port}/"
@@ -1374,6 +1377,9 @@ class Peggy2Environment(IntegrationTestsEnvironment):
                     "program": "cmd/ebrelayer",
                     "envFile": "${workspaceFolder}/smart-contracts/.env",
                     "env": {"ETHEREUM_PRIVATE_KEY": eth_accounts["available"][i][1]},
+                    # Generally we want to use relayer0_exec_args, except for:
+                    # - here we don't have the initial "ebrelayer"
+                    # - here we are using "${workspaceFolder} for" "--symbol-translator-file"
                     "args": [
                         "init-relayer",
                         "--network-descriptor", str(eth_chain_id),
@@ -1397,6 +1403,9 @@ class Peggy2Environment(IntegrationTestsEnvironment):
                     "program": "cmd/ebrelayer",
                     "envFile": "${workspaceFolder}/smart-contracts/.env",
                     "env": {"ETHEREUM_PRIVATE_KEY": eth_accounts["available"][i][1]},
+                    # Generally we want to use witness0_exec_args, except for:
+                    # - here we don't have the initial "ebrelayer"
+                    # - here we are using "${workspaceFolder} for" "--symbol-translator-file"
                     "args": [
                         "init-witness",
                         str(eth_chain_id),
@@ -1419,6 +1428,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
                     "mode": "debug",
                     "program": "cmd/sifnoded",
                     "envFile": "${workspaceFolder}/smart-contracts/.env",
+                    # Generally we want to use sifnoded_exec_args
                     "args": [
                         "start",
                         "--log_format", "json",
