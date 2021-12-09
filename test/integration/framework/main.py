@@ -794,15 +794,6 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             "available": available,
         }
 
-    # def run_ebrelayer_peggy(self, tcp_url, websocket_address, bridge_registry_sc_addr, validator_moniker,
-    #     validator_mnemonic, chain_id, symbol_translator_file, relayerdb_path, ethereum_address, ethereum_private_key,
-    #     log_file=None
-    # ):
-    #     return Ebrelayer(self.cmd).init(tcp_url, websocket_address, bridge_registry_sc_addr, validator_moniker,
-    #         validator_mnemonic, chain_id, ethereum_private_key=ethereum_private_key, ethereum_address=ethereum_address,
-    #         node=tcp_url, keyring_backend="test", sign_with=validator_moniker,
-    #         symbol_translator_file=symbol_translator_file, relayerdb_path=relayerdb_path, log_file=log_file)
-
     # Override
     def run(self):
         # self.project._make_go_binaries()
@@ -906,38 +897,11 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             }
         }
 
-        environment_json, dot_env, launch_json, intellij_ebrelayer_config, intellij_sifnoded_config = \
-            self.env_json_writer(
-                self.project.project_dir(),
-                self.project.go_bin_dir,
-                peggy_sc_addrs,
-                hardhat_accounts,
-                admin_account_name,
-                admin_account_address,
-                sifnode_validator0_home,
-                sifnode_validators,
-                sifnode_relayers,
-                sifnode_witnesses,
-                tcp_url,
-                hardhat_bind_hostname,
-                hardhat_port,
-                hardhat_chain_id,
-                chain_dir,
-                sifnoded_exec_args,
-                relayer0_exec_args,
-                witness0_exec_args,
-            )
-
-        run_dir = self.project.project_dir(".run")
-        self.cmd.mkdir(run_dir)
-        vscode_dir = self.project.project_dir(".vscode")
-        self.cmd.mkdir(vscode_dir)
-
-        self.cmd.write_text_file(os.path.join(self.project.project_dir("smart-contracts/environment.json")), json.dumps(environment_json, indent=2))
-        self.cmd.write_text_file(os.path.join(self.project.project_dir("smart-contracts/env.json")), json.dumps(dot_env, indent=2))
-        self.cmd.write_text_file(os.path.join(vscode_dir, "launch.json"), json.dumps(launch_json, indent=2))
-        self.cmd.write_text_file(os.path.join(run_dir, "ebrelayer.run.xml"), joinlines(intellij_ebrelayer_config))
-        self.cmd.write_text_file(os.path.join(run_dir, "sifnoded.run.xml"), joinlines(intellij_sifnoded_config))
+        self.write_env_files(self.project.project_dir(), self.project.go_bin_dir, peggy_sc_addrs, hardhat_accounts,
+            admin_account_name, admin_account_address, sifnode_validator0_home, sifnode_validators, sifnode_relayers,
+            sifnode_witnesses, tcp_url, hardhat_bind_hostname, hardhat_port, hardhat_chain_id, chain_dir,
+            sifnoded_exec_args, relayer0_exec_args, witness0_exec_args
+         )
 
         return hardhat_proc, sifnoded_proc, relayer0_proc, witness0_proc
 
@@ -1152,18 +1116,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
 
         return [relayer0_exec_args], [witness0_exec_args]
 
-    # # Write compatibility JSON files with smart contract addresses so that test_utilities.py:contract_artifact() keeps
-    # # working. We're not using truffle, so we need to create files with the same names and structure as it's used for
-    # # integration tests: .["networks"]["5777"]["address"]
-    # def write_compatibility_json_file_with_smart_contract_addresses(self, smart_contract_addresses):
-    #     integration_tests_expected_network_id = 5777
-    #     d = project_dir("smart-contracts", "build", "contracts")
-    #     self.cmd.mkdir(d)
-    #     for sc_name, sc_addr in smart_contract_addresses.items():
-    #         self.cmd.write_text_file(os.path.join(d, f"{sc_name}.json"), json.dumps({
-    #             "networks": {str(integration_tests_expected_network_id): {"address": sc_addr}}}, indent=4))
-
-    def env_json_writer(self, project_dir, go_bin_dir, evm_smart_contract_addrs, eth_accounts, admin_account_name,
+    def write_env_files(self, project_dir, go_bin_dir, evm_smart_contract_addrs, eth_accounts, admin_account_name,
         admin_account_address, sifnode_validator0_home, sifnode_validators, sifnode_relayers, sifnode_witnesses,
         tcp_url, hardhat_bind_hostname, hardhat_port, hardhat_chain_id, chain_dir, sifnoded_exec_args,
         relayer0_exec_args, witness0_exec_args
@@ -1418,8 +1371,8 @@ class Peggy2Environment(IntegrationTestsEnvironment):
                 "</component>",
             ]
 
-        intellij_ebrelayer_configs = []
         intellij_sifnoded_configs = []
+        intellij_ebrelayer_configs = []
         for config in launch_json["configurations"]:
             if config["name"].startswith("Debug Relayer"):
                 intellij_ebrelayer_configs.append(render_intellij_run_xml(
@@ -1435,8 +1388,21 @@ class Peggy2Environment(IntegrationTestsEnvironment):
                     "github.com/Sifchain/sifnode/cmd/sifnoded",
                     "$PROJECT_DIR$/cmd/sifnoded/main.go",
                     {}))
+            # TODO Witness
 
-        return environment_json, dot_env, launch_json, exactly_one(intellij_ebrelayer_configs), exactly_one(intellij_sifnoded_configs)
+        intellij_ebrelayer_config = exactly_one(intellij_ebrelayer_configs)
+        intellij_sifnoded_config = exactly_one(intellij_sifnoded_configs)
+
+        run_dir = self.project.project_dir(".run")
+        self.cmd.mkdir(run_dir)
+        vscode_dir = self.project.project_dir(".vscode")
+        self.cmd.mkdir(vscode_dir)
+
+        self.cmd.write_text_file(os.path.join(self.project.project_dir("smart-contracts/environment.json")), json.dumps(environment_json, indent=2))
+        self.cmd.write_text_file(os.path.join(self.project.project_dir("smart-contracts/env.json")), json.dumps(dot_env, indent=2))
+        self.cmd.write_text_file(os.path.join(vscode_dir, "launch.json"), json.dumps(launch_json, indent=2))
+        self.cmd.write_text_file(os.path.join(run_dir, "ebrelayer.run.xml"), joinlines(intellij_ebrelayer_config))
+        self.cmd.write_text_file(os.path.join(run_dir, "sifnoded.run.xml"), joinlines(intellij_sifnoded_config))
 
 
 class IBCEnvironment(IntegrationTestsEnvironment):
