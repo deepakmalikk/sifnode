@@ -1260,10 +1260,11 @@ class Peggy2Environment(IntegrationTestsEnvironment):
                     "mode": "debug",
                     "program": "cmd/ebrelayer",
                     "envFile": "${workspaceFolder}/smart-contracts/.env",
-                    "env": {"ETHEREUM_PRIVATE_KEY": eth_accounts["available"][i][1]},
                     # Generally we want to use relayer0_exec_args, except for:
                     # - here we don't have the initial "ebrelayer"
                     # - here we are using "${workspaceFolder} for" "--symbol-translator-file"
+                    # - here we don't have ETHEREUM_ADDRESS env
+                    "env": {"ETHEREUM_PRIVATE_KEY": eth_accounts["validators"][0][1]},
                     "args": [
                         "init-relayer",
                         "--network-descriptor", str(eth_chain_id),
@@ -1276,7 +1277,6 @@ class Peggy2Environment(IntegrationTestsEnvironment):
                         "--keyring-backend", "test",
                         "--from", relayer["address"],
                         "--symbol-translator-file", "${workspaceFolder}/test/integration/config/symbol_translator.json",
-                        "--relayerdb-path", f"./relayer-{i}",  # TODO Make it a property of relayer, e.g. relayer["db_path"]
                         "--home", relayer["home"]
                     ]
                 } for i, relayer in enumerate(sifnode_relayers)], *[{
@@ -1286,10 +1286,12 @@ class Peggy2Environment(IntegrationTestsEnvironment):
                     "mode": "debug",
                     "program": "cmd/ebrelayer",
                     "envFile": "${workspaceFolder}/smart-contracts/.env",
-                    "env": {"ETHEREUM_PRIVATE_KEY": eth_accounts["available"][i][1]},
                     # Generally we want to use witness0_exec_args, except for:
                     # - here we don't have the initial "ebrelayer"
                     # - here we are using "${workspaceFolder} for" "--symbol-translator-file"
+                    # - here we don't have ETHEREUM_ADDRESS env
+                    # TODO This is probably obsolete, need "--network-descriptor" etc.
+                    "env": {"ETHEREUM_PRIVATE_KEY": eth_accounts["validators"][0][1]},
                     "args": [
                         "init-witness",
                         str(eth_chain_id),
@@ -1302,7 +1304,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
                         "--keyring-backend", "test",
                         "--from", witness["address"],
                         "--symbol-translator-file", "${workspaceFolder}/test/integration/config/symbol_translator.json",
-                        "--relayerdb-path", f"./witness-{i}",
+                        "--relayerdb-path", witness["db_path"],
                         "--home", witness["home"]
                     ]
                 } for i, witness in enumerate(sifnode_witnesses)], {
@@ -1404,6 +1406,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         self.cmd.write_text_file(os.path.join(run_dir, "ebrelayer.run.xml"), joinlines(intellij_ebrelayer_config))
         self.cmd.write_text_file(os.path.join(run_dir, "sifnoded.run.xml"), joinlines(intellij_sifnoded_config))
 
+        return environment_json, dot_env, launch_json, intellij_ebrelayer_config, intellij_sifnoded_config
 
 class IBCEnvironment(IntegrationTestsEnvironment):
     def __init__(self, cmd):
