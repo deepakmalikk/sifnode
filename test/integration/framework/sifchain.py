@@ -240,6 +240,7 @@ class Ebrelayer:
 
 
 # This is probably useful for any program that uses web3 library in the same way
+# ETHEREUM_ADDRESS has to start with "0x" and ETHEREUM_PRIVATE_KEY has to be without "0x".
 def _env_for_ethereum_address_and_key(ethereum_address, ethereum_private_key):
     env = {}
     if ethereum_private_key:

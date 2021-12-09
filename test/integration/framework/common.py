@@ -71,14 +71,17 @@ def popen(args, cwd=None, env=None, text=None, stdin=None, stdout=None, stderr=N
     logging.debug(f"popen(): args={repr(args)}, cwd={repr(cwd)}")
     return subprocess.Popen(args, cwd=cwd, env=env, stdin=stdin, stdout=stdout, stderr=stderr, text=text)
 
-def dict_merge(*dicts):
+def dict_merge(*dicts, override=True):
     result = {}
     for d in dicts:
         for k, v in d.items():
-            result[k] = v
+            key_already_exists = k in result
+            if (not key_already_exists) or (key_already_exists and override):
+                result[k] = v
     return result
 
 def format_as_shell_env_vars(env, export=True):
+    # TODO escaping/quoting, e.g. shlex.quote(v)
     return ["{}{}=\"{}\"".format("export " if export else "", k, v) for k, v in env.items()]
 
 # Recursively transforms template strings containing "${VALUE}". Example:

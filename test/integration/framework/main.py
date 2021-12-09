@@ -961,6 +961,9 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         admin_account_address = self.cmd.sifnoded_peggy2_add_account(admin_account_name, tokens, is_admin=True,
             sifnoded_home=validator0_home)
 
+        # TODO Check if sifnoded_peggy2_add_relayer_witness_account can be executed offline (without sifnoded running)
+        # TODO Check if sifnoded_peggy2_set_cross_chain_fee can be executed offline (without sifnoded running)
+
         # Create an account for each relayer
         # Note: "--home" is shared with sifnoded's "--home"
         relayers = [{
@@ -1062,6 +1065,9 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         #     --symbol-translator-file ../test/integration/config/symbol_translator.json
         #     --keyring-backend test
         #     --home /tmp/sifnodedNetwork/validators/localnet/xxx-yyy/.sifnoded
+        # env:
+        #     "ETHEREUM_ADDRESS": evm_accounts["validators"][0]
+        #     "ETHEREUM_PRIVATE_KEY": evm_account["validators"][1]
         relayer0_exec_args = ebrelayer.peggy2_build_ebrelayer_cmd(
             "init-relayer",
             hardhat_chain_id,
@@ -1174,6 +1180,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             }
         }
 
+        # TODO Do we want "0x" prefixes here for private keys?
         dot_env = dict_merge({
             "BASEDIR": project_dir,
             "ETHEREUM_ADDRESS": eth_accounts["available"][0][0],
@@ -1193,7 +1200,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             "ETH_PORT": str(hardhat_port),
             "ROWAN_SOURCE": admin_account_address,
             "BRIDGE_BANK_ADDRESS": evm_smart_contract_addrs.bridge_bank,
-            "BRIDGE_REGISTRY_ADDRESS": evm_smart_contract_addrs.bridge_registry,
+            # "BRIDGE_REGISTRY_ADDRESS": evm_smart_contract_addrs.bridge_registry,
             "BRIDGE_REGISTERY_ADDRESS": evm_smart_contract_addrs.bridge_registry, # TODO Typo, remove, keeping it for now for compatibility
             "COSMOS_BRIDGE_ADDRESS": evm_smart_contract_addrs.cosmos_bridge,
             "ROWANTOKEN_ADDRESS": evm_smart_contract_addrs.rowan,
@@ -1231,8 +1238,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             f"WITNESS_NAME_{i}": witness["name"],
         } for i, witness in enumerate(sifnode_witnesses)])
 
-        # VS Code
-
+        # launch.json for VS Code
         launch_json = {
             "version": "0.2.0",
             "configurations": [
@@ -1264,7 +1270,9 @@ class Peggy2Environment(IntegrationTestsEnvironment):
                     # - here we don't have the initial "ebrelayer"
                     # - here we are using "${workspaceFolder} for" "--symbol-translator-file"
                     # - here we don't have ETHEREUM_ADDRESS env
-                    "env": {"ETHEREUM_PRIVATE_KEY": eth_accounts["validators"][0][1]},
+                    # TODO Probable bug, should be "eth_accounts["validators"][0][1]}"
+                    "env": {"ETHEREUM_PRIVATE_KEY": eth_accounts["available"][i][1]},
+                    # "env": {"ETHEREUM_PRIVATE_KEY": eth_accounts["validators"][0][1]},
                     "args": [
                         "init-relayer",
                         "--network-descriptor", str(eth_chain_id),
@@ -1290,10 +1298,12 @@ class Peggy2Environment(IntegrationTestsEnvironment):
                     # - here we don't have the initial "ebrelayer"
                     # - here we are using "${workspaceFolder} for" "--symbol-translator-file"
                     # - here we don't have ETHEREUM_ADDRESS env
-                    # TODO This is probably obsolete, need "--network-descriptor" etc.
-                    "env": {"ETHEREUM_PRIVATE_KEY": eth_accounts["validators"][0][1]},
+                    # TODO Probable bug, should be "eth_accounts["validators"][0][1]}"
+                    "env": {"ETHEREUM_PRIVATE_KEY": eth_accounts["available"][i][1]},
+                    # "env": {"ETHEREUM_PRIVATE_KEY": eth_accounts["validators"][0][1]},
                     "args": [
                         "init-witness",
+                        # TODO This is probably obsolete, need "--network-descriptor" etc.
                         str(eth_chain_id),
                         tcp_url,
                         w3_url,
@@ -1313,9 +1323,10 @@ class Peggy2Environment(IntegrationTestsEnvironment):
                     "request": "launch",
                     "mode": "debug",
                     "program": "cmd/sifnoded",
-                    "envFile": "${workspaceFolder}/smart-contracts/.env",
                     # Generally we want to use sifnoded_exec_args, except for:
                     # - here we don't have the initial "sifnoded"
+                    # TODO Do not use .env file here
+                    "envFile": "${workspaceFolder}/smart-contracts/.env",
                     "args": [
                         "start",
                         "--log_format", "json",
@@ -1346,7 +1357,6 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         }
 
         # IntelliJ
-
         def render_intellij_run_xml(name, joined_args, package, filepath, envs):
             def q(s): return s  # TODO Qoute/escape
 
@@ -1375,10 +1385,18 @@ class Peggy2Environment(IntegrationTestsEnvironment):
 
         intellij_sifnoded_configs = []
         intellij_ebrelayer_configs = []
+        intellij_witness_configs = []
         for config in launch_json["configurations"]:
             if config["name"].startswith("Debug Relayer"):
                 intellij_ebrelayer_configs.append(render_intellij_run_xml(
                     "ebrelayer devenv",
+                    " ".join(config["args"]),
+                    "github.com/Sifchain/sifnode/cmd/ebrelayer",
+                    "$PROJECT_DIR$/cmd/ebrelayer/main.go",
+                    {"ETHEREUM_PRIVATE_KEY": dot_env["ETHEREUM_PRIVATE_KEY"]}))
+            elif config["name"].startswith("Debug Witness"):
+                intellij_witness_configs.append(render_intellij_run_xml(
+                    "witness devenv",
                     " ".join(config["args"]),
                     "github.com/Sifchain/sifnode/cmd/ebrelayer",
                     "$PROJECT_DIR$/cmd/ebrelayer/main.go",
@@ -1390,9 +1408,9 @@ class Peggy2Environment(IntegrationTestsEnvironment):
                     "github.com/Sifchain/sifnode/cmd/sifnoded",
                     "$PROJECT_DIR$/cmd/sifnoded/main.go",
                     {}))
-            # TODO Witness
 
         intellij_ebrelayer_config = exactly_one(intellij_ebrelayer_configs)
+        intellij_witness_config = exactly_one(intellij_witness_configs)
         intellij_sifnoded_config = exactly_one(intellij_sifnoded_configs)
 
         run_dir = self.project.project_dir(".run")
@@ -1400,13 +1418,15 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         vscode_dir = self.project.project_dir(".vscode")
         self.cmd.mkdir(vscode_dir)
 
-        self.cmd.write_text_file(os.path.join(self.project.project_dir("smart-contracts/environment.json")), json.dumps(environment_json, indent=2))
-        self.cmd.write_text_file(os.path.join(self.project.project_dir("smart-contracts/env.json")), json.dumps(dot_env, indent=2))
+        self.cmd.write_text_file(self.project.project_dir("smart-contracts/environment.json"), json.dumps(environment_json, indent=2))
+        self.cmd.write_text_file(self.project.project_dir("smart-contracts/env.json"), json.dumps(dot_env, indent=2))
+        self.cmd.write_text_file(self.project.project_dir("smart-contracts/.env"), joinlines(format_as_shell_env_vars(dot_env, export=True)))
         self.cmd.write_text_file(os.path.join(vscode_dir, "launch.json"), json.dumps(launch_json, indent=2))
         self.cmd.write_text_file(os.path.join(run_dir, "ebrelayer.run.xml"), joinlines(intellij_ebrelayer_config))
+        self.cmd.write_text_file(os.path.join(run_dir, "witness.run.xml"), joinlines(intellij_witness_config))
         self.cmd.write_text_file(os.path.join(run_dir, "sifnoded.run.xml"), joinlines(intellij_sifnoded_config))
 
-        return environment_json, dot_env, launch_json, intellij_ebrelayer_config, intellij_sifnoded_config
+        return environment_json, dot_env, launch_json, intellij_ebrelayer_config, intellij_witness_config, intellij_sifnoded_config
 
 class IBCEnvironment(IntegrationTestsEnvironment):
     def __init__(self, cmd):
