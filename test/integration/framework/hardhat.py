@@ -1,6 +1,7 @@
 import json
 from dataclasses import dataclass
 from common import *
+from command import buildcmd
 
 
 # Peggy uses different smart contracts (e.g. in Peggy2.0 there is no BridgeToken, there is CosmosBridge etc.)
@@ -57,7 +58,7 @@ class Hardhat:
             "0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6",
         ]]]
 
-    def start(self, hostname=None, port=None, fork=None, fork_block_number=None, log_file=None):
+    def build_start_args(self, hostname=None, port=None, fork=None, fork_block_number=None):
         # TODO We need to manaege smart-contracts/hardhat.config.ts + it also reads smart-contracts/.env via dotenv
         # TODO Handle failures, e.g. if the process is already running we get exit value 1 and
         # "Error: listen EADDRINUSE: address already in use 127.0.0.1:8545"
@@ -66,8 +67,7 @@ class Hardhat:
             (["--port", str(port)] if port is not None else []) + \
             (["--fork", fork] if fork else []) + \
             (["--fork-block-number", str(fork_block_number)] if fork_block_number is not None else [])
-        proc = self.cmd.popen(args, cwd=self.project.smart_contracts_dir, log_file=log_file)
-        return proc
+        return buildcmd(args, cwd=self.project.smart_contracts_dir)
 
     def compile_smart_contracts(self):
         self.project.npx(["hardhat", "compile"], cwd=project_dir("smart-contracts"), pipe=False)

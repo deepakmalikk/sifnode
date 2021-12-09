@@ -135,16 +135,21 @@ class Sifnoded(Command):
         res = self.sifnoded_exec(args, keyring_backend="test", sifnoded_home=sifnoded_home)
         return res
 
-    def sifnoded_start(self, tcp_url=None, minimum_gas_prices=None, sifnoded_home=None, log_file=None,
-        log_format_json=False
+    def sifnoded_start(self, tcp_url=None, minimum_gas_prices=None, sifnoded_home=None, log_format_json=False,
+        log_file=None
     ):
+        sifnoded_exec_args = self.sifnoded_build_start_cmd(tcp_url=tcp_url, minimum_gas_prices=minimum_gas_prices,
+            sifnoded_home=sifnoded_home, log_format_json=log_format_json)
+        return self.spawn_asynchronous_process(sifnoded_exec_args, log_file=log_file)
+
+    def sifnoded_build_start_cmd(self, tcp_url=None, minimum_gas_prices=None, sifnoded_home=None, log_format_json=False):
         args = [self.binary, "start"] + \
             (["--minimum-gas-prices", sif_format_amount(*minimum_gas_prices)] if minimum_gas_prices is not None else []) + \
             (["--rpc.laddr", tcp_url] if tcp_url else []) + \
             (["--log_level", "debug"] if log_format_json else []) + \
             (["--log_format", "json"] if log_format_json else []) + \
             (["--home", sifnoded_home] if sifnoded_home else [])
-        return self.popen(args, log_file=log_file)
+        return buildcmd(args)
 
     def sifnoded_exec(self, args, sifnoded_home=None, keyring_backend=None, stdin=None, cwd=None):
         args = [self.binary] + args + \
@@ -165,25 +170,6 @@ class Sifnoded(Command):
         while not self.exists(path):
             time.sleep(1)
 
-    def wait_for_sif_account_up(self, address, tcp_url=None):
-        # TODO Deduplicate: this is also in run_ebrelayer()
-        # netdef_json is path to file containing json_dump(netdef)
-        # while not self.tcp_probe_connect("localhost", tendermint_port):
-        #     time.sleep(1)
-        # self.wait_for_sif_account(netdef_json, validator1_address)
-
-        # Peggy2
-        # How this works: by default, the command below will try to do a POST to http://localhost:26657.
-        # So the port has to be up first, but this query will fail anyway if it is not.
-        args = ["sifnoded", "query", "account", address] + \
-            (["--node", tcp_url] if tcp_url else [])
-        while True:
-            try:
-                self.execst(args)
-                break
-            except Exception as e:
-                log.debug(f"Waiting for sif account {address}... ({repr(e)})")
-                time.sleep(1)
 
 class Sifgen:
     def __init__(self, cmd):

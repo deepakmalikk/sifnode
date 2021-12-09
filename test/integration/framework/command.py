@@ -32,6 +32,11 @@ class Command:
         stderr = log_file or None
         return popen(args, stdout=stdout, stderr=stderr, **kwargs)
 
+    # Starts a process asynchronously (for sifnoded, hardhat, ebrelayer etc.)
+    # The arguments should correspond to what buildcmd() returns.
+    def spawn_asynchronous_process(self, exec_args, log_file=None):
+        return self.popen(**exec_args, log_file=log_file)
+
     def rm(self, path):
         if os.path.exists(path):
             os.remove(path)
