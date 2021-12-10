@@ -13,6 +13,19 @@ import (
 	"github.com/tendermint/tendermint/crypto/ed25519"
 )
 
+func TestMsgCreateDistribution(t *testing.T) {
+	distributor := sdk.AccAddress("addr1_______________")
+	distributionType := types.DistributionType_DISTRIBUTION_TYPE_AIRDROP
+	output := test.CreatOutputList(2000, "1")
+	authorizedRunner := sdk.AccAddress("addr2_______________")
+	result := types.NewMsgCreateDistribution(distributor, distributionType, output, authorizedRunner.String())
+
+	assert.Equal(t, distributor.String(), result.Distributor)
+	assert.Equal(t, distributionType, result.DistributionType)
+	assert.Equal(t, output, result.Output)
+	assert.Equal(t, authorizedRunner.String(), result.GetAuthorizedRunner())
+
+}
 func TestMsgCreateDistribution_ValidateBasic(t *testing.T) {
 	sifapp.SetConfig(false)
 	distributor := sdk.AccAddress("addr1_______________")
@@ -23,6 +36,7 @@ func TestMsgCreateDistribution_ValidateBasic(t *testing.T) {
 		Output:           test.CreatOutputList(2000, "1"),
 		AuthorizedRunner: authorizedRunner.String(),
 	}
+	t.Log(msg.Distributor)
 	err := msg.ValidateBasic()
 	assert.NoError(t, err)
 }
@@ -119,4 +133,24 @@ func TestMsgCreateClaim_ValidateBasic(t *testing.T) {
 	}
 	err := msg.ValidateBasic()
 	assert.NoError(t, err)
+}
+
+func TestMsgCreateUserClaim(t *testing.T) {
+	userClaimAddress := sdk.AccAddress("addr2_______________")
+	claimType := types.DistributionType_DISTRIBUTION_TYPE_UNSPECIFIED
+	result := types.NewMsgCreateUserClaim(userClaimAddress, claimType)
+
+	assert.Equal(t, userClaimAddress.String(), result.UserClaimAddress)
+	assert.Equal(t, claimType, result.UserClaimType)
+}
+func TestMsgRunDistribution(t *testing.T) {
+	runner := types.AttributeKeyDistributionRunner
+	distributionName := types.AttributeKeyDistributionName
+	distributionType := types.DistributionType_DISTRIBUTION_TYPE_AIRDROP
+	result := types.NewMsgRunDistribution(runner, distributionName, distributionType)
+
+	assert.Equal(t, runner, result.GetAuthorizedRunner())
+	assert.Equal(t, distributionName, result.DistributionName)
+	assert.Equal(t, distributionType, result.DistributionType)
+
 }
